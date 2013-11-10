@@ -1,0 +1,11 @@
+*
+.*
+# Use same .gitignore
+!.gitignore
+
+!*.qpf
+!*.qsf
+!*.v
+!*.qws
+!*.sof
+!*.pof
