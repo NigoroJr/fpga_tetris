@@ -6,6 +6,8 @@
 !*.qpf
 !*.qsf
 !*.v
+!*.h
 !*.qws
 !*.sof
 !*.pof
+!VGA_Controller
