@@ -27,4 +27,4 @@ DATE = "22:06:15  November 09, 2013"
 
 # Revisions
 
-PROJECT_REVISION = "fpga-tetris"
+PROJECT_REVISION = "fpga_tetris"

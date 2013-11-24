@@ -35,7 +35,7 @@
 // VGA controller, PLL, and reset are from DE2 distribution CD
 // --------------------------------------------------------------------
 
-module fpga-tetris
+module fpga_tetris
 	(
 		////////////////////	Clock Input	 	////////////////////	 
 		CLOCK_27,						//	27 MHz
