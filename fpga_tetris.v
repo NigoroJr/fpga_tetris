@@ -305,24 +305,15 @@ assign	GPIO_0		=	36'hzzzzzzzzz;
 assign	GPIO_1		=	36'hzzzzzzzzz;
 
 wire [31:0]	mSEG7_DIG;
-reg	 [31:0]	Cont;
-wire		VGA_CTRL_CLK;
-wire		AUD_CTRL_CLK;
+reg [31:0] Cont;
+wire VGA_CTRL_CLK;
+wire AUD_CTRL_CLK;
 wire [9:0]	mVGA_R;
 wire [9:0]	mVGA_G;
 wire [9:0]	mVGA_B;
 wire [19:0]	mVGA_ADDR;			//video memory address
 wire [9:0]  Coord_X, Coord_Y;	//display coods
 wire		DLY_RST;
-
-
-//always@(posedge CLOCK_50 or negedge KEY[0])
-//begin
-//	if(!KEY[0])
-//	Cont	<=	0;
-//	else
-//	Cont	<=	Cont+1;
-//end
 
 assign	TD_RESET	=	1'b1;	//	Allow 27 MHz input
 assign	AUD_ADCLRCK	=	AUD_DACLRCK;
@@ -331,14 +322,10 @@ assign	AUD_XCK		=	AUD_CTRL_CLK;
 assign	LEDR =	18'h0;
 assign	LEDG =	8'h0;
 
-//assign mVGA_G = (mVGA_ADDR<20'h0ffff)? 10'd1000:0;
-//assign mVGA_R = 10'd0000;
-//assign mVGA_B = 10'd0000;
-
+// Things that are needed to use VGA connection (mostly copy and pasted from Cornell's example)
 Reset_Delay			r0	(	.iCLK(CLOCK_50),.oRESET(DLY_RST)	);
 
 VGA_Audio_PLL 		p1	(	.areset(~DLY_RST),.inclk0(CLOCK_27),.c0(VGA_CTRL_CLK),.c1(AUD_CTRL_CLK),.c2(VGA_CLK)	);
-
 
 VGA_Controller		u1	(	//	Host Side
 							.iCursor_RGB_EN(4'b0111),
@@ -359,39 +346,74 @@ VGA_Controller		u1	(	//	Host Side
 							//	Control Signal
 							.iCLK(VGA_CTRL_CLK),
 							.iRST_N(DLY_RST)	);
+// End VGA_Controller
 
-
-//Down sample to 512x512 and use coordinates to get memory address
-assign SRAM_ADDR = {Coord_X[9:1],Coord_Y[9:1]} ;		// [17:0]
-//assign SRAM_ADDR = mVGA_ADDR[19:2];
+// SRAM control
+assign SRAM_ADDR = addr_reg;
 assign SRAM_UB_N = 0;					// hi byte select enabled
 assign SRAM_LB_N = 0;					// lo byte select enabled
 assign SRAM_CE_N = 0;					// chip is enabled
-//assign SRAM_WE_N = 1;					// write when ZERO
 assign SRAM_OE_N = 0;					//output enable is overidden by WE
-// If KEY1 is not pressed, then float bus, so that SRAM can drive it (READ)
-assign SRAM_WE_N = (KEY[1]? 1'b1 : 1'b0);
-// If KEY1 is pressed, drive it with data from SWITCHES[15:0] to be stored in SRAM (WRITE)
-//assign SRAM_DQ = (KEY[1]? 16'hzzzz : SW[15:0]);
-assign SRAM_DQ = (KEY[1]? 16'hzzzz :
-			(KEY[2]?	//if key2 is up
-			/*
-			{Coord_X[8:5], 						//red
-			Coord_Y[8:5] & ~{4{Coord_X[9]}},  	//green
-			Coord_Y[8:5] & {4{Coord_X[9]}}, 	//blue
-			 4'b0}								//not used
-			 */
-			 {
-			 Coord_X >= 10'd100 && Coord_X <= 10'd400 && Coord_Y >= 10'd100 && Coord_Y <= 10'd200 ? 4'h9 : 4'h0,
-			 4'h0,
-			 4'h0,
-			 4'b0}
-			: SW[15:0])); //else write the switches
+assign SRAM_WE_N = we;
+assign SRAM_DQ = (we) ? 16'hzzzz : data_reg;
 
 // Show memory on the LEDs and 7-seg display
 assign  mVGA_R = {SRAM_DQ[15:12], 6'b0} ;
 assign  mVGA_G = {SRAM_DQ[11:8], 6'b0} ;
 assign  mVGA_B = {SRAM_DQ[7:4], 6'b0} ;
 
+/*******************************************
+  Variables for Tetris finite state machine
+ *******************************************/
+// The following was written by Naoki Mizuno
+parameter   INIT = 4'd0,
+            DRAW_BOARD = 4'd1,
+				GENERATE = 4'd2,
+				MOVE_ONE_DOWN = 4'd3;
+				/*
+				MOVE_LEFT = 4'd4,
+				MOVE_RIGHT = 4'd5,
+				SPIN_LEFT = 4'd6,
+				HIT_BOTTOM = 4'd7,
+				CHECK_COMPLETE_ROW = 4'd8,
+				DELETE_ROW = 4'd9,
+				SHIFT_ALL_BLOCKS_ABOVE = 4'd10,
+				GAME_OVER = 4'd11;
+				*/
+// State for FSM
+reg [3:0] S;
+// Next state
+reg [3:0] NS;
+// write enable (0 -> enabled, 1 -> disabled)
+reg we;
+reg [17:0] addr_reg;
+reg [15:0] data_reg;
+// Game reset signal
+wire reset;
+assign reset = KEY[0];
 
-endmodule //top module
+// Change state on posedge clock
+always @(posedge VGA_CTRL_CLK or negedge reset) begin
+	if (reset == 1'b0) begin
+		S <= INIT;
+	end
+	else begin
+		S <= NS;
+	end
+end
+
+// Calculate next state
+always @(*) begin
+	case (S)
+		// TODO
+		INIT: begin
+		end
+		DRAW_BOARD: begin
+		end
+		GENERATE: begin
+		end
+		MOVE_ONE_DOWN: begin
+		end
+	endcase
+end
+endmodule
