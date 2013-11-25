@@ -1,32 +1,32 @@
 module fpga_tetris(
-//    Clock Input
-  input CLOCK_50,    //    50 MHz
-  input CLOCK_27,     //      27 MHz
-//    Push Button
-  input [3:0] KEY,      //    Pushbutton[3:0]
-//    DPDT Switch
-  input [17:0] SW,        //    Toggle Switch[17:0]
-//    7-SEG Display
-  output [6:0]    HEX0,HEX1,HEX2,HEX3,HEX4,HEX5,HEX6,HEX7,  // Seven Segment Digits
-//    LED
-  output [8:0]    LEDG,  //    LED Green[8:0]
-  output [17:0] LEDR,  //    LED Red[17:0]
-//    GPIO
- inout [35:0] GPIO_0,GPIO_1,    //    GPIO Connections
-//    TV Decoder
+// Clock Input
+  input CLOCK_50,    // 50 MHz
+  input CLOCK_27,     // 27 MHz
+// Push Button
+  input [3:0] KEY,      // Pushbutton[3:0]
+// DPDT Switch
+  input [17:0] SW,        // Toggle Switch[17:0]
+// 7-SEG Display
+  output [6:0] HEX0,HEX1,HEX2,HEX3,HEX4,HEX5,HEX6,HEX7,  // Seven Segment Digits
+// LED
+  output [8:0] LEDG,  // LED Green[8:0]
+  output [17:0] LEDR,  // LED Red[17:0]
+// GPIO
+ inout [35:0] GPIO_0,GPIO_1,    // GPIO Connections
+// TV Decoder
 //TD_DATA,        //    TV Decoder Data bus 8 bits
 //TD_HS,        //    TV Decoder H_SYNC
 //TD_VS,        //    TV Decoder V_SYNC
   output TD_RESET,    //    TV Decoder Reset
 // VGA
-  output VGA_CLK,                           //    VGA Clock
-  output VGA_HS,                            //    VGA H_SYNC
-  output VGA_VS,                            //    VGA V_SYNC
-  output VGA_BLANK,                        //    VGA BLANK
-  output VGA_SYNC,                        //    VGA SYNC
-  output [9:0] VGA_R,                           //    VGA Red[9:0]
-  output [9:0] VGA_G,                             //    VGA Green[9:0]
-  output [9:0] VGA_B,                           //    VGA Blue[9:0]
+  output VGA_CLK,                         // VGA Clock
+  output VGA_HS,                          // VGA H_SYNC
+  output VGA_VS,                          // VGA V_SYNC
+  output VGA_BLANK,                       // VGA BLANK
+  output VGA_SYNC,                        // VGA SYNC
+  output [9:0] VGA_R,                     // VGA Red[9:0]
+  output [9:0] VGA_G,                     // VGA Green[9:0]
+  output [9:0] VGA_B,                     // VGA Blue[9:0]
   
   inout [15:0] SRAM_DQ,
   output [17:0] SRAM_ADDR,
@@ -37,7 +37,7 @@ module fpga_tetris(
   output SRAM_OE_N
 );
 
-//    All inout port turn to tri-state
+// All inout port turn to tri-state
 assign    GPIO_0        =    36'hzzzzzzzzz;
 assign    GPIO_1        =    36'hzzzzzzzzz;
 
@@ -108,8 +108,6 @@ assign mVGA_R = {r, 6'b0};
 assign mVGA_G = {g, 6'b0};
 assign mVGA_B = {b, 6'b0};
 
-reg [3:0] r, g, b;
-reg [3:0] S, NS;
 parameter   INIT = 4'd0,
             DRAW_BOARD = 4'd1,
             GENERATE = 4'd2,
@@ -127,9 +125,14 @@ parameter   INIT = 4'd0,
 // Colors (TODO: change name because it's confusing)
 parameter black = 4'h0,
           white = 4'hf;
+reg [3:0] r, g, b;
+reg [3:0] S, NS;
 
 /*---- SRAM stuff ----*/
+// 0 when enabled, 1 when disabled
 reg we;
+// For dev purpose
+assign we = 1'b1;
 assign SRAM_LB_N = 0;
 assign SRAM_OE_N = 0;
 assign SRAM_UB_N = 0;
@@ -143,13 +146,14 @@ assign gameStarted = SW[0];
 
 // Use the coordinates and see the field as grids of 10px by 10px
 /*
-   |<-220->|
-   +------------------+
+    |<-220->|
+    +------------------+
     |       +--+       |
     |       |  |       |
     |       +--+       |
     +------------------+
 */
+// These are something like 2-dimensional arrays
 wire [4:0] x, y;
 assign x = (mCoord_X - 220) / 10;
 assign y = (mCoord_Y - 20) / 10;
