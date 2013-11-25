@@ -3,6 +3,9 @@
 # Use same .gitignore
 !.gitignore
 
+# Markdown files
+!*.md
+
 !*.qpf
 !*.qsf
 !*.v
