@@ -1,32 +1,32 @@
 module fpga_tetris(
-//	Clock Input
-  input CLOCK_50,	//	50 MHz
+//    Clock Input
+  input CLOCK_50,    //    50 MHz
   input CLOCK_27,     //      27 MHz
-//	Push Button
-  input [3:0] KEY,      //	Pushbutton[3:0]
-//	DPDT Switch
-  input [17:0] SW,		//	Toggle Switch[17:0]
-//	7-SEG Display
-  output [6:0]	HEX0,HEX1,HEX2,HEX3,HEX4,HEX5,HEX6,HEX7,  // Seven Segment Digits
-//	LED
-  output [8:0]	LEDG,  //	LED Green[8:0]
-  output [17:0] LEDR,  //	LED Red[17:0]
-//	GPIO
- inout [35:0] GPIO_0,GPIO_1,	//	GPIO Connections
-//	TV Decoder
-//TD_DATA,    	//	TV Decoder Data bus 8 bits
-//TD_HS,		//	TV Decoder H_SYNC
-//TD_VS,		//	TV Decoder V_SYNC
-  output TD_RESET,	//	TV Decoder Reset
+//    Push Button
+  input [3:0] KEY,      //    Pushbutton[3:0]
+//    DPDT Switch
+  input [17:0] SW,        //    Toggle Switch[17:0]
+//    7-SEG Display
+  output [6:0]    HEX0,HEX1,HEX2,HEX3,HEX4,HEX5,HEX6,HEX7,  // Seven Segment Digits
+//    LED
+  output [8:0]    LEDG,  //    LED Green[8:0]
+  output [17:0] LEDR,  //    LED Red[17:0]
+//    GPIO
+ inout [35:0] GPIO_0,GPIO_1,    //    GPIO Connections
+//    TV Decoder
+//TD_DATA,        //    TV Decoder Data bus 8 bits
+//TD_HS,        //    TV Decoder H_SYNC
+//TD_VS,        //    TV Decoder V_SYNC
+  output TD_RESET,    //    TV Decoder Reset
 // VGA
-  output VGA_CLK,   						//	VGA Clock
-  output VGA_HS,							//	VGA H_SYNC
-  output VGA_VS,							//	VGA V_SYNC
-  output VGA_BLANK,						//	VGA BLANK
-  output VGA_SYNC,						//	VGA SYNC
-  output [9:0] VGA_R,   						//	VGA Red[9:0]
-  output [9:0] VGA_G,	 						//	VGA Green[9:0]
-  output [9:0] VGA_B,   						//	VGA Blue[9:0]
+  output VGA_CLK,                           //    VGA Clock
+  output VGA_HS,                            //    VGA H_SYNC
+  output VGA_VS,                            //    VGA V_SYNC
+  output VGA_BLANK,                        //    VGA BLANK
+  output VGA_SYNC,                        //    VGA SYNC
+  output [9:0] VGA_R,                           //    VGA Red[9:0]
+  output [9:0] VGA_G,                             //    VGA Green[9:0]
+  output [9:0] VGA_B,                           //    VGA Blue[9:0]
   
   inout [15:0] SRAM_DQ,
   output [17:0] SRAM_ADDR,
@@ -37,16 +37,16 @@ module fpga_tetris(
   output SRAM_OE_N
 );
 
-//	All inout port turn to tri-state
-assign	GPIO_0		=	36'hzzzzzzzzz;
-assign	GPIO_1		=	36'hzzzzzzzzz;
+//    All inout port turn to tri-state
+assign    GPIO_0        =    36'hzzzzzzzzz;
+assign    GPIO_1        =    36'hzzzzzzzzz;
 
 wire RST;
 assign RST = KEY[0];
 
 // reset delay gives some time for peripherals to initialize
 wire DLY_RST;
-Reset_Delay r0(	.iCLK(CLOCK_50),.oRESET(DLY_RST) );
+Reset_Delay r0(    .iCLK(CLOCK_50),.oRESET(DLY_RST) );
 
 // Send switches to red leds 
 assign LEDR = SW;
@@ -66,28 +66,28 @@ assign HEX5 = blank;
 assign HEX6 = blank;
 assign HEX7 = blank;
 
-wire		VGA_CTRL_CLK;
-wire		AUD_CTRL_CLK;
-wire [9:0]	mVGA_R;
-wire [9:0]	mVGA_G;
-wire [9:0]	mVGA_B;
-wire [9:0]	mCoord_X;
-wire [9:0]	mCoord_Y;
+wire        VGA_CTRL_CLK;
+wire        AUD_CTRL_CLK;
+wire [9:0]    mVGA_R;
+wire [9:0]    mVGA_G;
+wire [9:0]    mVGA_B;
+wire [9:0]    mCoord_X;
+wire [9:0]    mCoord_Y;
 
-assign	TD_RESET = 1'b1; // Enable 27 MHz
+assign    TD_RESET = 1'b1; // Enable 27 MHz
 
-VGA_Audio_PLL 	p1 (	
-	.areset(~DLY_RST),
-	.inclk0(CLOCK_27),
-	.c0(VGA_CTRL_CLK),
-	.c1(AUD_CTRL_CLK),
-	.c2(VGA_CLK)
+VGA_Audio_PLL     p1 (    
+    .areset(~DLY_RST),
+    .inclk0(CLOCK_27),
+    .c0(VGA_CTRL_CLK),
+    .c1(AUD_CTRL_CLK),
+    .c2(VGA_CLK)
 );
 
 
 vga_sync u1(
    .iCLK(VGA_CTRL_CLK),
-   .iRST_N(DLY_RST&KEY[0]),	
+   .iRST_N(DLY_RST&KEY[0]),    
    .iRed(mVGA_R),
    .iGreen(mVGA_G),
    .iBlue(mVGA_B),
@@ -145,58 +145,58 @@ assign gameStarted = SW[0];
 /*
    |<-220->|
    +------------------+
-	|       +--+       |
-	|       |  |       |
-	|       +--+       |
-	+------------------+
+    |       +--+       |
+    |       |  |       |
+    |       +--+       |
+    +------------------+
 */
 wire [4:0] x, y;
 assign x = (mCoord_X - 220) / 10;
 assign y = (mCoord_Y - 20) / 10;
 // Calculate next state
 always @(*) begin
-	case (S)
-		INIT: begin
-			if (gameStarted == 1'b1) begin
-				NS = DRAW_BOARD;
-			end
-			else begin
-				NS = INIT;
-			end
-		end
-		DRAW_BOARD: begin
-			
-		end
-	endcase
+    case (S)
+        INIT: begin
+            if (gameStarted == 1'b1) begin
+                NS = DRAW_BOARD;
+            end
+            else begin
+                NS = INIT;
+            end
+        end
+        DRAW_BOARD: begin
+            
+        end
+    endcase
 end
 
 // What to show on screen for each state (technically, write to SRAM)
 always @(*) begin
-	// Paint in black if it's outside the field
-	if ((mCoord_X < 220 || (mCoord_X >= 420 && mCoord_X < 640)) || (mCoord_Y < 20 || (mCoord_Y >= 460 && mCoord_Y < 480))) begin
-		r = black;
-		g = black;
-		b = black;
-	end
-	else begin
-		case (S)
-			INIT: begin
-				r = black;
-				g = black;
-				b = black;
-			end
-		endcase
-	end
+    // Paint in black if it's outside the field
+    if ((mCoord_X < 220 || (mCoord_X >= 420 && mCoord_X < 640)) || (mCoord_Y < 20 || (mCoord_Y >= 460 && mCoord_Y < 480))) begin
+        r = black;
+        g = black;
+        b = black;
+    end
+    else begin
+        case (S)
+            INIT: begin
+                r = black;
+                g = black;
+                b = black;
+            end
+        endcase
+    end
 end
 
 // Change states
 always @(posedge VGA_CTRL_CLK or negedge RST) begin
-	if (RST == 1'b0) begin
-		S <= INIT;
-	end
-	else begin
-		S <= NS;
-	end
+    if (RST == 1'b0) begin
+        S <= INIT;
+    end
+    else begin
+        S <= NS;
+    end
 end
 
 endmodule
