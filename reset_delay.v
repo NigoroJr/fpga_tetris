@@ -7,7 +7,7 @@ always@(posedge iCLK)
 begin
 	if(Cont!=20'hFFFFF)
 	begin
-		Cont	<=	Cont+1;
+		Cont	<=	Cont+1'b1;
 		oRESET	<=	1'b0;
 	end
 	else
