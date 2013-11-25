@@ -104,40 +104,50 @@ vga_sync u1(
    .VGA_BLANK(VGA_BLANK)
 );
 
-assign mVGA_R = {r, 6'b0};
-assign mVGA_G = {g, 6'b0};
-assign mVGA_B = {b, 6'b0};
+// draw_? are decided at the very end of this file
+reg [3:0] draw_r, draw_g, draw_b;
+assign mVGA_R = {draw_r, 6'b0};
+assign mVGA_G = {draw_g, 6'b0};
+assign mVGA_B = {draw_b, 6'b0};
 
 parameter   INIT = 4'd0,
-            DRAW_BOARD = 4'd1,
-            GENERATE = 4'd2,
-            MOVE_ONE_DOWN = 4'd3;
+            GENERATE = 4'd1,
+            MOVE_ONE_DOWN = 4'd2;
             /*
-            MOVE_LEFT = 4'd4,
-            MOVE_RIGHT = 4'd5,
-            SPIN_LEFT = 4'd6,
-            HIT_BOTTOM = 4'd7,
-            CHECK_COMPLETE_ROW = 4'd8,
-            DELETE_ROW = 4'd9,
-            SHIFT_ALL_BLOCKS_ABOVE = 4'd10,
-            GAME_OVER = 4'd11;
+            MOVE_LEFT = 4'd3,
+            MOVE_RIGHT = 4'd4,
+            SPIN_LEFT = 4'd5,
+            HIT_BOTTOM = 4'd6,
+            CHECK_COMPLETE_ROW = 4'd7,
+            DELETE_ROW = 4'd8,
+            SHIFT_ALL_BLOCKS_ABOVE = 4'd9,
+            GAME_OVER = 4'd10;
             */
+parameter I = 3'd0,
+          O = 3'd1,
+          L = 3'd2,
+          J = 3'd3,
+          S = 3'd4,
+          Z = 3'd5,
+          T = 3'd6;
 // Colors (TODO: change name because it's confusing)
 parameter black = 4'h0,
           white = 4'hf;
 reg [3:0] r, g, b;
-reg [3:0] S, NS;
+reg [3:0] STATE, NEXT_STATE;
 
 /*---- SRAM stuff ----*/
-// 0 when enabled, 1 when disabled
-reg we;
+// 1 when disabled, 0 when enabled
+wire we;
+// 1 when overwriting (such as generating new Tetromino)
+reg overwrite;
 // For dev purpose
-assign we = 1'b1;
+assign we = 1'b0;
 assign SRAM_LB_N = 0;
 assign SRAM_OE_N = 0;
 assign SRAM_UB_N = 0;
 assign SRAM_DQ = we ? 16'hzzzz : {r, g, b, 4'b0};
-assign SRAM_ADDR = {x, y, 8'b0};
+assign SRAM_ADDR = overwrite ? {tetromino_x, tetromino_y, 8'b0} : {read_x, read_y, 8'b0};
 assign SRAM_WE_N = we;
 
 /*---- Control variables ----*/
@@ -154,52 +164,101 @@ assign gameStarted = SW[0];
     +------------------+
 */
 // These are something like 2-dimensional arrays
-wire [4:0] x, y;
-assign x = (mCoord_X - 220) / 10;
-assign y = (mCoord_Y - 20) / 10;
+wire [4:0] read_x, read_y;
+assign read_x = (mCoord_X - 220) / 10;
+assign read_y = (mCoord_Y - 20) / 10;
+reg [4:0] tetromino_x, tetromino_y;
+reg [2:0] current_tetromino;
 // Calculate next state
 always @(*) begin
-    case (S)
+    case (STATE)
         INIT: begin
             if (gameStarted == 1'b1) begin
-                NS = DRAW_BOARD;
+                NEXT_STATE = GENERATE;
             end
             else begin
-                NS = INIT;
+                NEXT_STATE = INIT;
             end
         end
-        DRAW_BOARD: begin
-            
+        GENERATE: begin
+            // TODO: get random number
+            current_tetromino = 3'd3;
+            overwrite = 1'b1;
+            // Draw Tetromino
+            case (current_tetromino)
+                I: begin
+                    // Cyan
+                    r = black;
+                    g = white;
+                    b = white;
+                    // How do I change all 4 grids at once?
+                    tetromino_x = 5'd4;
+                    tetromino_y = 5'd0;
+                end
+                O: begin
+                    // Yellow
+                    r = white;
+                    g = white;
+                    b = black;
+                end
+                L: begin
+                    // Orange
+                    r = white;
+                    g = 4'd165;
+                    b = black;
+                end
+                J: begin
+                    // Blue
+                    r = black;
+                    g = black;
+                    b = white;
+                end
+                S: begin
+                    // Green
+                    r = black;
+                    g = white;
+                    b = black;
+                end
+                Z:begin
+                    // Red
+                    r = white;
+                    g = black;
+                    b = black;
+                end
+                T: begin
+                    // Purple
+                    r = white;
+                    g = black;
+                    b = white;
+                end
+            endcase
         end
     endcase
 end
 
-// What to show on screen for each state (technically, write to SRAM)
+// Show content on SRAM
 always @(*) begin
     // Paint in black if it's outside the field
     if ((mCoord_X < 220 || (mCoord_X >= 420 && mCoord_X < 640)) || (mCoord_Y < 20 || (mCoord_Y >= 460 && mCoord_Y < 480))) begin
-        r = black;
-        g = black;
-        b = black;
+        draw_r = black;
+        draw_g = black;
+        draw_b = black;
     end
+    // Otherwise, show content of SRAM at that address
     else begin
-        case (S)
-            INIT: begin
-                r = black;
-                g = black;
-                b = black;
-            end
-        endcase
+        draw_r = SRAM_DQ[15:12];
+        draw_g = SRAM_DQ[11:8];
+        draw_b = SRAM_DQ[7:4];
     end
 end
 
 // Change states
 always @(posedge VGA_CTRL_CLK or negedge RST) begin
     if (RST == 1'b0) begin
-        S <= INIT;
+        STATE <= INIT;
     end
     else begin
-        S <= NS;
+        STATE <= NEXT_STATE;
     end
 end
 
