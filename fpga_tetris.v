@@ -165,8 +165,8 @@ assign gameStarted = SW[0];
 */
 // These are something like 2-dimensional arrays
 wire [4:0] read_x, read_y;
-assign read_x = (mCoord_X - 220) / 10;
-assign read_y = (mCoord_Y - 20) / 10;
+assign read_x = (mCoord_X - 220) / 20;
+assign read_y = (mCoord_Y - 20) / 20;
 reg [4:0] x, y, tetromino_x, tetromino_y;
 reg [2:0] current_tetromino;
 // Iterate through 0-3 to draw Tetrominos
@@ -271,8 +271,8 @@ end
 always @(*) begin
     // Paint in black if it's outside the field
     if ((mCoord_X < 220 || (mCoord_X >= 420 && mCoord_X < 640))
-        // 40 not 20 because the first 2 "grids" are not shown
-        || (mCoord_Y < 40 || (mCoord_Y >= 460 && mCoord_Y < 480))) begin
+        // 60 not 20 because the first 2 "grids" are not shown
+        || (mCoord_Y < 60 || (mCoord_Y >= 460 && mCoord_Y < 480))) begin
         draw_r = black;
         draw_g = black;
         draw_b = black;
