@@ -134,7 +134,7 @@ parameter I = 3'd0,
 parameter black = 4'h0,
           white = 4'hf;
 reg [3:0] r, g, b;
-reg [3:0] STATE, NEXT_STATE;
+reg [3:0] STATE;
 
 /*---- SRAM stuff ----*/
 // 1 when disabled, 0 when enabled
@@ -147,7 +147,7 @@ assign SRAM_LB_N = 0;
 assign SRAM_OE_N = 0;
 assign SRAM_UB_N = 0;
 assign SRAM_DQ = we ? 16'hzzzz : {r, g, b, 4'b0};
-assign SRAM_ADDR = overwrite ? {tetromino_x, tetromino_y, 8'b0} : {read_x, read_y, 8'b0};
+assign SRAM_ADDR = overwrite ? {x, y, 8'b0} : {read_x, read_y, 8'b0};
 assign SRAM_WE_N = we;
 
 /*---- Control variables ----*/
@@ -167,23 +167,36 @@ assign gameStarted = SW[0];
 wire [4:0] read_x, read_y;
 assign read_x = (mCoord_X - 220) / 10;
 assign read_y = (mCoord_Y - 20) / 10;
-reg [4:0] tetromino_x, tetromino_y;
+reg [4:0] x, y, tetromino_x, tetromino_y;
 reg [2:0] current_tetromino;
+// Iterate through 0-3 to draw Tetrominos
+reg [1:0] draw_tetromino_count;
 // Calculate next state
-always @(*) begin
+always @(posedge VGA_CTRL_CLK or negedge RST) begin
+    if (RST == 1'b0) begin
+        STATE <= INIT;
+    end
+    else begin
     case (STATE)
         INIT: begin
             if (gameStarted == 1'b1) begin
-                NEXT_STATE = GENERATE;
+                // Prepare for GENERATE state and change state
+                // TODO: get random number
+                current_tetromino = I;
+                draw_tetromino_count <= 2'd0;
+                STATE <= GENERATE;
             end
             else begin
-                NEXT_STATE = INIT;
+                STATE <= INIT;
             end
         end
         GENERATE: begin
-            // TODO: get random number
-            current_tetromino = 3'd3;
             overwrite = 1'b1;
+            // Go to next state when finished drawing
+            if (draw_tetromino_count == 2'd3) begin
+                draw_tetromino_count <= 2'd0;
+                STATE <= MOVE_ONE_DOWN;
+            end
             // Draw Tetromino
             case (current_tetromino)
                 I: begin
@@ -191,9 +204,26 @@ always @(*) begin
                     r = black;
                     g = white;
                     b = white;
-                    // How do I change all 4 grids at once?
                     tetromino_x = 5'd4;
                     tetromino_y = 5'd0;
+                    case (draw_tetromino_count)
+                        2'd0: begin
+                            x = tetromino_x;
+                            y = tetromino_y;
+                        end
+                        2'd1: begin
+                            x = tetromino_x;
+                            y = tetromino_y + 1;
+                        end
+                        2'd2: begin
+                            x = tetromino_x;
+                            y = tetromino_y + 2;
+                        end
+                        2'd3: begin
+                            x = tetromino_x;
+                            y = tetromino_y + 3;
+                        end
+                    endcase
                 end
                 O: begin
                     // Yellow
@@ -234,12 +264,15 @@ always @(*) begin
             endcase
         end
     endcase
+    end
 end
 
 // Show content on SRAM
 always @(*) begin
     // Paint in black if it's outside the field
-    if ((mCoord_X < 220 || (mCoord_X >= 420 && mCoord_X < 640)) || (mCoord_Y < 20 || (mCoord_Y >= 460 && mCoord_Y < 480))) begin
+    if ((mCoord_X < 220 || (mCoord_X >= 420 && mCoord_X < 640))
+        // 40 not 20 because the first 2 "grids" are not shown
+        || (mCoord_Y < 40 || (mCoord_Y >= 460 && mCoord_Y < 480))) begin
         draw_r = black;
         draw_g = black;
         draw_b = black;
@@ -249,16 +282,6 @@ always @(*) begin
         draw_r = SRAM_DQ[15:12];
         draw_g = SRAM_DQ[11:8];
         draw_b = SRAM_DQ[7:4];
-    end
-end
-
-// Change states
-always @(posedge VGA_CTRL_CLK or negedge RST) begin
-    if (RST == 1'b0) begin
-        STATE <= INIT;
-    end
-    else begin
-        STATE <= NEXT_STATE;
     end
 end
 
