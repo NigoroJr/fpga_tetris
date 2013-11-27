@@ -206,19 +206,20 @@ reg [4:0] init_x, init_y;
 always @(posedge VGA_CTRL_CLK or negedge RST) begin
     if (RST == 1'b0) begin
         // The following have to be initialized here because it will be used in INIT state
-        init_x <= 5'b0;
-        init_y <= 5'b0;
+        init_x <= 5'd0;
+        init_y <= 5'd0;
         STATE <= INIT;
     end
     else begin
     case (STATE)
         INIT: begin
-            if (gameStarted == 1'b1 && init_y == 5'd22) begin
-                init_x <= 5'b0;
-                init_y <= 5'b0;
+            if (gameStarted == 1'b1 && init_y == 23) begin
+                init_x <= 5'd0;
+                init_y <= 5'd0;
                 we <= 1'b1;
                 // Prepare for GENERATE state and change state
-                draw_tetromino_count <= 3'b0;
+                // This is 3'b111 because 1 is added before the condition, making the first one 0
+                draw_tetromino_count <= 3'b111;
                 STATE <= GENERATE;
             end
             else begin
@@ -227,8 +228,9 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
                 we <= 1'b0;
                 x <= init_x;
                 y <= init_y;
-                if (init_x == 5'd10) begin
-                    init_x <= 5'd0;
+                STATE <= INIT;
+                if (init_x == 10) begin
+                    init_x <= 0;
                     init_y <= init_y + 1;
                 end
                 else begin
@@ -240,38 +242,10 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
             we <= 1'b1;
             // TODO: get random number
             current_tetromino <= SW[17:15];
+            // Use the same "pivot" instead of different ones for each Tetromino
+            tetromino_x <= 5'd3;
+            tetromino_y <= 5'd2;
             STATE <= DRAW;
-            // Decide "pivot"
-            case (current_tetromino)
-                I: begin
-                    tetromino_x <= 5'd4;
-                    tetromino_y <= 5'd2;
-                end
-                O: begin
-                    tetromino_x <= 5'd4;
-                    tetromino_y <= 5'd2;
-                end
-                L: begin
-                    tetromino_x <= 5'd4;
-                    tetromino_y <= 5'd2;
-                end
-                J: begin
-                    tetromino_x <= 5'd5;
-                    tetromino_y <= 5'd2;
-                end
-                S: begin
-                    tetromino_x <= 5'd4;
-                    tetromino_y <= 5'd3;
-                end
-                Z: begin
-                    tetromino_x <= 5'd5;
-                    tetromino_y <= 5'd3;
-                end
-                T: begin
-                    tetromino_x <= 5'd4;
-                    tetromino_y <= 5'd3;
-                end
-            endcase
         end
         DRAW: begin
             // Tell MOVE_ONE_DOWN that we drew the Tetromino
@@ -295,18 +269,17 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
                 | It was designed like this so that this state can be used both to draw and erase. |
                 +----------------------------------------------------------------------------------+ */
             // Go to next state when finished drawing
-            if (draw_tetromino_count == 3'd3) begin
+            if (draw_tetromino_count == 3'd4) begin
                 // Disable write
                 we <= 1'b1;
-                draw_tetromino_count <= 3'd0;
+                //draw_tetromino_count <= 3'b111;
                 STATE <= MOVE_ONE_DOWN;
             end
             else begin
+                STATE <= WRITE_TO_SRAM;
                 // Enable write
                 we <= 1'b0;
-                // Make sure 0 doesn't get skipped
-                if (draw_tetromino_count != 3'd0)
-                    draw_tetromino_count <= draw_tetromino_count + 1;
+                draw_tetromino_count <= draw_tetromino_count + 1;
                 // Draw Tetromino based on pivot
                 case (current_tetromino)
                     I: begin
@@ -316,35 +289,35 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
                                 y <= tetromino_y;
                             end
                             3'd1: begin
-                                x <= tetromino_x;
-                                y <= tetromino_y + 1;
+                                x <= tetromino_x + 1;
+                                y <= tetromino_y;
                             end
                             3'd2: begin
-                                x <= tetromino_x;
-                                y <= tetromino_y + 2;
+                                x <= tetromino_x + 2;
+                                y <= tetromino_y;
                             end
                             3'd3: begin
-                                x <= tetromino_x;
-                                y <= tetromino_y + 3;
+                                x <= tetromino_x + 3;
+                                y <= tetromino_y;
                             end
                         endcase
                     end
                     O: begin
                         case (draw_tetromino_count)
                             3'd0: begin
-                                x <= tetromino_x;
+                                x <= tetromino_x + 1;
                                 y <= tetromino_y;
                             end
                             3'd1: begin
-                                x <= tetromino_x;
+                                x <= tetromino_x + 1;
                                 y <= tetromino_y + 1;
                             end
                             3'd2: begin
-                                x <= tetromino_x + 1;
+                                x <= tetromino_x + 2;
                                 y <= tetromino_y;
                             end
                             3'd3: begin
-                                x <= tetromino_x + 1;
+                                x <= tetromino_x + 2;
                                 y <= tetromino_y + 1;
                             end
                         endcase
@@ -352,19 +325,19 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
                     L: begin
                         case (draw_tetromino_count)
                             3'd0: begin
-                                x <= tetromino_x;
+                                x <= tetromino_x + 1;
                                 y <= tetromino_y;
                             end
                             3'd1: begin
-                                x <= tetromino_x;
+                                x <= tetromino_x + 1;
                                 y <= tetromino_y + 1;
                             end
                             3'd2: begin
-                                x <= tetromino_x;
+                                x <= tetromino_x + 1;
                                 y <= tetromino_y + 2;
                             end
                             3'd3: begin
-                                x <= tetromino_x + 1;
+                                x <= tetromino_x + 2;
                                 y <= tetromino_y + 2;
                             end
                         endcase
@@ -372,19 +345,19 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
                     J: begin
                         case (draw_tetromino_count)
                             3'd0: begin
-                                x <= tetromino_x;
+                                x <= tetromino_x + 2;
                                 y <= tetromino_y;
                             end
                             3'd1: begin
-                                x <= tetromino_x;
+                                x <= tetromino_x + 2;
                                 y <= tetromino_y + 1;
                             end
                             3'd2: begin
-                                x <= tetromino_x;
+                                x <= tetromino_x + 1;
                                 y <= tetromino_y + 2;
                             end
                             3'd3: begin
-                                x <= tetromino_x - 1;
+                                x <= tetromino_x + 2;
                                 y <= tetromino_y + 2;
                             end
                         endcase
@@ -393,59 +366,59 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
                         case (draw_tetromino_count)
                             3'd0: begin
                                 x <= tetromino_x;
-                                y <= tetromino_y;
+                                y <= tetromino_y + 1;
                             end
                             3'd1: begin
                                 x <= tetromino_x + 1;
-                                y <= tetromino_y;
+                                y <= tetromino_y + 1;
                             end
                             3'd2: begin
                                 x <= tetromino_x + 1;
-                                y <= tetromino_y - 1;
+                                y <= tetromino_y;
                             end
                             3'd3: begin
                                 x <= tetromino_x + 2;
-                                y <= tetromino_y - 1;
+                                y <= tetromino_y;
                             end
                         endcase
                     end
                     Z: begin
                         case (draw_tetromino_count)
                             3'd0: begin
-                                x <= tetromino_x - 1;
-                                y <= tetromino_y - 1;
+                                x <= tetromino_x;
+                                y <= tetromino_y;
                             end
                             3'd1: begin
-                                x <= tetromino_x;
-                                y <= tetromino_y - 1;
-                            end
-                            3'd2: begin
-                                x <= tetromino_x;
-                                y <= tetromino_y;
-                            end
-                            3'd3: begin
                                 x <= tetromino_x + 1;
                                 y <= tetromino_y;
+                            end
+                            3'd2: begin
+                                x <= tetromino_x + 1;
+                                y <= tetromino_y + 1;
+                            end
+                            3'd3: begin
+                                x <= tetromino_x + 2;
+                                y <= tetromino_y + 1;
                             end
                         endcase
                     end
                     T: begin
                         case (draw_tetromino_count)
                             3'd0: begin
-                                x <= tetromino_x - 1;
-                                y <= tetromino_y;
+                                x <= tetromino_x;
+                                y <= tetromino_y + 1;
                             end
                             3'd1: begin
-                                x <= tetromino_x;
+                                x <= tetromino_x + 1;
                                 y <= tetromino_y;
                             end
                             3'd2: begin
-                                x <= tetromino_x;
-                                y <= tetromino_y - 1;
+                                x <= tetromino_x + 1;
+                                y <= tetromino_y + 1;
                             end
                             3'd3: begin
-                                x <= tetromino_x + 1;
-                                y <= tetromino_y;
+                                x <= tetromino_x + 2;
+                                y <= tetromino_y + 1;
                             end
                         endcase
                     end
@@ -463,6 +436,7 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
             STATE <= WRITE_TO_SRAM;
         end
         MOVE_ONE_DOWN: begin
+            draw_tetromino_count <= 3'd0;
             // TODO: Check if the Tetromino can actually be moved down
             we <= 1'b1;
             /*
@@ -478,8 +452,7 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
             // Otherwise, clear the Tetromino first
             else begin
                 STATE <= ERASE;
-            end
-            */
+            end*/
         end
     endcase
     end
