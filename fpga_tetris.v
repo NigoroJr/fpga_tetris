@@ -131,22 +131,28 @@ parameter I = 3'd0,
           Z = 3'd5,
           T = 3'd6;
 // Colors (TODO: change name because it's confusing)
-parameter black = 4'h0,
-          white = 4'hf;
+parameter BLACK     = 16'h0000,
+          WHITE     = 16'h0fff,
+          CYAN      = 16'h00ff,
+          YELLOW    = 16'h0ff0,
+          ORANGE    = 16'h0fa0,
+          BLUE      = 16'h000f,
+          GREEN     = 16'h00f0,
+          RED       = 16'h0f00,
+          PURPLE    = 16'h0f0f;
 reg [3:0] r, g, b;
 reg [3:0] STATE;
 
 /*---- SRAM stuff ----*/
 // 1 when disabled, 0 when enabled
-wire we;
-// For dev purpose
-assign we = 1'b0;
+reg we;
+reg [15:0] color;
+assign SRAM_DQ = we ? 16'hzzzz : {color};
+assign SRAM_ADDR = we ? {grid_x, grid_y, 8'b0} : {x, y, 8'b0};
+assign SRAM_WE_N = we;
 assign SRAM_LB_N = 0;
 assign SRAM_OE_N = 0;
 assign SRAM_UB_N = 0;
-assign SRAM_DQ = we ? 16'hzzzz : {r, g, b, 4'b0};
-assign SRAM_ADDR = we ? {read_x, read_y, 8'b0} : {x, y, 8'b0};
-assign SRAM_WE_N = we;
 
 /*---- Control variables ----*/
 wire gameStarted;
@@ -162,229 +168,254 @@ assign gameStarted = SW[0];
     +------------------+
 */
 // These are something like 2-dimensional arrays
-wire [4:0] read_x, read_y;
-assign read_x = (mCoord_X - 220) / 20;
-assign read_y = (mCoord_Y - 20) / 20;
+wire [4:0] grid_x, grid_y;
+assign grid_x = (mCoord_X - 220) / 20;
+assign grid_y = (mCoord_Y - 20) / 20;
 // Coordinates used when writing to SRAM
 reg [4:0] x, y;
 reg [4:0] tetromino_x, tetromino_y;
 reg [2:0] current_tetromino;
-// Iterate through 0-3 to draw Tetrominos
-reg [1:0] draw_tetromino_count;
+// Iterate through 1-4 to draw Tetrominos (because it gets incremented before condition)
+reg [2:0] draw_tetromino_count, clear_tetromino_count;
+// Used to initialize the SRAM
+reg [4:0] init_x, init_y;
 // Calculate next state
 always @(posedge VGA_CTRL_CLK or negedge RST) begin
     if (RST == 1'b0) begin
+        init_x <= 5'b0;
+        init_y <= 5'b0;
+        draw_tetromino_count <= 3'b0;
+        clear_tetromino_count <= 3'b0;
         STATE <= INIT;
     end
     else begin
     case (STATE)
         INIT: begin
-            if (gameStarted == 1'b1) begin
+            if (gameStarted == 1'b1 && init_y == 5'd22) begin
                 // Prepare for GENERATE state and change state
                 // TODO: get random number
-                current_tetromino = I;
-                draw_tetromino_count <= 2'd0;
+                current_tetromino <= SW[17:15];
+                draw_tetromino_count <= 3'd0;
+                init_x <= 5'd0;
+                init_y <= 5'd0;
                 STATE <= GENERATE;
             end
             else begin
-                STATE <= INIT;
+                // Initialize field with white
+                color <= WHITE;
+                x <= init_x;
+                y <= init_y;
+                if (init_x == 5'd10) begin
+                    init_x <= 5'd0;
+                    init_y <= init_y + 1;
+                end
+                else begin
+                    init_x <= init_x + 1;
+                end
             end
         end
         GENERATE: begin
-            // Enable write
-            we = 1'b0;
             // Go to next state when finished drawing
-            if (draw_tetromino_count == 2'd3) begin
-                draw_tetromino_count <= 2'd0;
+            if (draw_tetromino_count == 3'd5) begin
+                // Disable write
+                we <= 1'b1;
+                draw_tetromino_count <= 3'd0;
                 STATE <= MOVE_ONE_DOWN;
             end
+            else begin
+            // Enable write
+            we <= 1'b0;
+            // This is the reason why draw_tetromino_count goes from 1 to 4
+            draw_tetromino_count <= draw_tetromino_count + 1;
             // Draw Tetromino
             case (current_tetromino)
                 I: begin
-                    // Cyan
-                    r = black;
-                    g = white;
-                    b = white;
-                    tetromino_x = 5'd4;
-                    tetromino_y = 5'd0;
+                    color <= CYAN;
+                    tetromino_x <= 5'd4;
+                    tetromino_y <= 5'd2;
                     case (draw_tetromino_count)
-                        2'd0: begin
-                            x = tetromino_x;
-                            y = tetromino_y;
+                        3'd1: begin
+                            x <= tetromino_x;
+                            y <= tetromino_y;
                         end
-                        2'd1: begin
-                            x = tetromino_x;
-                            y = tetromino_y + 1;
+                        3'd2: begin
+                            x <= tetromino_x;
+                            y <= tetromino_y + 1;
                         end
-                        2'd2: begin
-                            x = tetromino_x;
-                            y = tetromino_y + 2;
+                        3'd3: begin
+                            x <= tetromino_x;
+                            y <= tetromino_y + 2;
                         end
-                        2'd3: begin
-                            x = tetromino_x;
-                            y = tetromino_y + 3;
+                        3'd4: begin
+                            x <= tetromino_x;
+                            y <= tetromino_y + 3;
                         end
                     endcase
                 end
                 O: begin
-                    // Yellow
-                    r = white;
-                    g = white;
-                    b = black;
-                    tetromino_x = 5'd4;
-                    tetromino_y = 5'd3;
+                    color <= YELLOW;
+                    tetromino_x <= 5'd4;
+                    tetromino_y <= 5'd2;
                     case (draw_tetromino_count)
-                        2'd0: begin
-                            x = tetromino_x;
-                            y = tetromino_y;
+                        3'd1: begin
+                            x <= tetromino_x;
+                            y <= tetromino_y;
                         end
-                        2'd1: begin
-                            x = tetromino_x;
-                            y = tetromino_y + 1;
+                        3'd2: begin
+                            x <= tetromino_x;
+                            y <= tetromino_y + 1;
                         end
-                        2'd2: begin
-                            x = tetromino_x + 1;
-                            y = tetromino_y;
+                        3'd3: begin
+                            x <= tetromino_x + 1;
+                            y <= tetromino_y;
                         end
-                        2'd3: begin
-                            x = tetromino_x + 1;
-                            y = tetromino_y + 1;
+                        3'd4: begin
+                            x <= tetromino_x + 1;
+                            y <= tetromino_y + 1;
                         end
                     endcase
                end
                 L: begin
-                    // Orange
-                    r = white;
-                    g = 4'd165;
-                    b = black;
-                    tetromino_x = 5'd5;
-                    tetromino_y = 5'd4;
+                    color <= ORANGE;
+                    tetromino_x <= 5'd4;
+                    tetromino_y <= 5'd2;
                     case (draw_tetromino_count)
-                        2'd0: begin
-                            x = tetromino_x;
-                            y = tetromino_y - 1;
+                        3'd1: begin
+                            x <= tetromino_x;
+                            y <= tetromino_y;
                         end
-                        2'd1: begin
-                            x = tetromino_x;
-                            y = tetromino_y;
+                        3'd2: begin
+                            x <= tetromino_x;
+                            y <= tetromino_y + 1;
                         end
-                        2'd2: begin
-                            x = tetromino_x;
-                            y = tetromino_y + 1;
+                        3'd3: begin
+                            x <= tetromino_x;
+                            y <= tetromino_y + 2;
                         end
-                        2'd3: begin
-                            x = tetromino_x + 1;
-                            y = tetromino_y + 1;
+                        3'd4: begin
+                            x <= tetromino_x + 1;
+                            y <= tetromino_y + 2;
                         end
                     endcase
                 end
                 J: begin
-                    // Blue
-                    r = black;
-                    g = black;
-                    b = white;
-                    tetromino_x = 5'd4;
-                    tetromino_y = 5'd0;
+                    color <= BLUE;
+                    tetromino_x <= 5'd5;
+                    tetromino_y <= 5'd2;
                     case (draw_tetromino_count)
-                        2'd0: begin
-                            x = tetromino_x;
-                            y = tetromino_y - 1;
+                        3'd1: begin
+                            x <= tetromino_x;
+                            y <= tetromino_y;
                         end
-                        2'd1: begin
-                            x = tetromino_x;
-                            y = tetromino_y;
+                        3'd2: begin
+                            x <= tetromino_x;
+                            y <= tetromino_y + 1;
                         end
-                        2'd2: begin
-                            x = tetromino_x;
-                            y = tetromino_y + 1;
+                        3'd3: begin
+                            x <= tetromino_x;
+                            y <= tetromino_y + 2;
                         end
-                        2'd3: begin
-                            x = tetromino_x - 1;
-                            y = tetromino_y + 1;
+                        3'd4: begin
+                            x <= tetromino_x - 1;
+                            y <= tetromino_y + 2;
                         end
                     endcase
                 end
                 S: begin
-                    // Green
-                    r = black;
-                    g = white;
-                    b = black;
-                    tetromino_x = 5'd5;
-                    tetromino_y = 5'd4;
+                    color <= GREEN;
+                    tetromino_x <= 5'd4;
+                    tetromino_y <= 5'd3;
                     case (draw_tetromino_count)
-                        2'd0: begin
-                            x = tetromino_x - 1;
-                            y = tetromino_y;
+                        3'd1: begin
+                            x <= tetromino_x;
+                            y <= tetromino_y;
                         end
-                        2'd1: begin
-                            x = tetromino_x;
-                            y = tetromino_y;
+                        3'd2: begin
+                            x <= tetromino_x + 1;
+                            y <= tetromino_y;
                         end
-                        2'd2: begin
-                            x = tetromino_x;
-                            y = tetromino_y - 1;
+                        3'd3: begin
+                            x <= tetromino_x + 1;
+                            y <= tetromino_y - 1;
                         end
-                        2'd3: begin
-                            x = tetromino_x + 1;
-                            y = tetromino_y - 1;
+                        3'd4: begin
+                            x <= tetromino_x + 2;
+                            y <= tetromino_y - 1;
                         end
                     endcase
                 end
                 Z:begin
-                    // Red
-                    r = white;
-                    g = black;
-                    b = black;
-                    tetromino_x = 5'd5;
-                    tetromino_y = 5'd4;
+                    color <= RED;
+                    tetromino_x <= 5'd5;
+                    tetromino_y <= 5'd3;
                     case (draw_tetromino_count)
-                        2'd0: begin
-                            x = tetromino_x - 1;
-                            y = tetromino_y - 1;
+                        3'd1: begin
+                            x <= tetromino_x - 1;
+                            y <= tetromino_y - 1;
                         end
-                        2'd1: begin
-                            x = tetromino_x;
-                            y = tetromino_y + 1;
+                        3'd2: begin
+                            x <= tetromino_x;
+                            y <= tetromino_y - 1;
                         end
-                        2'd2: begin
-                            x = tetromino_x;
-                            y = tetromino_y;
+                        3'd3: begin
+                            x <= tetromino_x;
+                            y <= tetromino_y;
                         end
-                        2'd3: begin
-                            x = tetromino_x + 1;
-                            y = tetromino_y;
+                        3'd4: begin
+                            x <= tetromino_x + 1;
+                            y <= tetromino_y;
                         end
                     endcase
                 end
                 T: begin
-                    // Purple
-                    r = white;
-                    g = black;
-                    b = white;
-                    tetromino_x = 5'd4;
-                    tetromino_y = 5'd4;
+                    color <= PURPLE;
+                    tetromino_x <= 5'd4;
+                    tetromino_y <= 5'd3;
                     case (draw_tetromino_count)
-                        2'd0: begin
-                            x = tetromino_x - 1;
-                            y = tetromino_y;
+                        3'd1: begin
+                            x <= tetromino_x - 1;
+                            y <= tetromino_y;
                         end
-                        2'd1: begin
-                            x = tetromino_x;
-                            y = tetromino_y;
+                        3'd2: begin
+                            x <= tetromino_x;
+                            y <= tetromino_y;
                         end
-                        2'd2: begin
-                            x = tetromino_x;
-                            y = tetromino_y - 1;
+                        3'd3: begin
+                            x <= tetromino_x;
+                            y <= tetromino_y - 1;
                         end
-                        2'd3: begin
-                            x = tetromino_x + 1;
-                            y = tetromino_y;
+                        3'd4: begin
+                            x <= tetromino_x + 1;
+                            y <= tetromino_y;
                         end
                     endcase
                 end
             endcase
+            end
         end // End of GENERATE
         MOVE_ONE_DOWN: begin
+            we <= 1'b1;
+            //if (key_input) begin
+            // MOVE
+            //end
+            // Redraw the Tetromino 1 down if current one was cleared
+            /*else*/ if (clear_tetromino_count == 4) begin
+                if (draw_tetromino_count == 5) begin
+                    STATE <=
+                end
+                case (current_tetromino)
+                    I: begin
+                    end
+                endcase
+            end
+            // Otherwise, clear the Tetromino first
+            else begin
+                clear_tetromino_count <= clear_tetromino_count + 1;
+                case (current_tetromino)
+                    I: begin
+                    end
+                endcase
+            end
         end
     endcase
     end
@@ -396,15 +427,13 @@ always @(*) begin
     if ((mCoord_X < 220 || (mCoord_X >= 420 && mCoord_X < 640))
         // 60 not 20 because the first 2 "grids" are not shown
         || (mCoord_Y < 60 || (mCoord_Y >= 460 && mCoord_Y < 480))) begin
-        draw_r = black;
-        draw_g = black;
-        draw_b = black;
+        {draw_r, draw_g, draw_b} = BLACK;
     end
     // Otherwise, show content of SRAM at that address
     else begin
-        draw_r = SRAM_DQ[15:12];
-        draw_g = SRAM_DQ[11:8];
-        draw_b = SRAM_DQ[7:4];
+        draw_r = SRAM_DQ[11:8];
+        draw_g = SRAM_DQ[7:4];
+        draw_b = SRAM_DQ[3:0];
     end
 end
 
