@@ -10,7 +10,7 @@ module fpga_tetris(
   output [6:0] HEX0,HEX1,HEX2,HEX3,HEX4,HEX5,HEX6,HEX7,  // Seven Segment Digits
 // LED
   output [8:0] LEDG,  // LED Green[8:0]
-  output [17:0] LEDR,  // LED Red[17:0]
+  output reg [17:0] LEDR,  // LED Red[17:0]
 // GPIO
  inout [35:0] GPIO_0,GPIO_1,    // GPIO Connections
 // TV Decoder
@@ -38,18 +38,18 @@ module fpga_tetris(
 );
 
 // All inout port turn to tri-state
-assign    GPIO_0        =    36'hzzzzzzzzz;
-assign    GPIO_1        =    36'hzzzzzzzzz;
+assign GPIO_0 = 36'hzzzzzzzzz;
+assign GPIO_1 = 36'hzzzzzzzzz;
 
 wire RST;
 assign RST = KEY[0];
 
 // reset delay gives some time for peripherals to initialize
 wire DLY_RST;
-Reset_Delay r0(    .iCLK(CLOCK_50),.oRESET(DLY_RST) );
+Reset_Delay r0( .iCLK(CLOCK_50),.oRESET(DLY_RST) );
 
 // Send switches to red leds 
-assign LEDR = SW;
+//assign LEDR = SW;
 
 // Turn off green leds
 assign LEDG = 8'h00;
@@ -68,15 +68,15 @@ assign HEX7 = blank;
 
 wire        VGA_CTRL_CLK;
 wire        AUD_CTRL_CLK;
-wire [9:0]    mVGA_R;
-wire [9:0]    mVGA_G;
-wire [9:0]    mVGA_B;
-wire [9:0]    mCoord_X;
-wire [9:0]    mCoord_Y;
+wire [9:0]  mVGA_R;
+wire [9:0]  mVGA_G;
+wire [9:0]  mVGA_B;
+wire [9:0]  mCoord_X;
+wire [9:0]  mCoord_Y;
 
-assign    TD_RESET = 1'b1; // Enable 27 MHz
+assign TD_RESET = 1'b1; // Enable 27 MHz
 
-VGA_Audio_PLL     p1 (    
+VGA_Audio_PLL   p1 (
     .areset(~DLY_RST),
     .inclk0(CLOCK_27),
     .c0(VGA_CTRL_CLK),
@@ -87,7 +87,7 @@ VGA_Audio_PLL     p1 (
 
 vga_sync u1(
    .iCLK(VGA_CTRL_CLK),
-   .iRST_N(DLY_RST&KEY[0]),    
+   .iRST_N(DLY_RST&KEY[0]),
    .iRed(mVGA_R),
    .iGreen(mVGA_G),
    .iBlue(mVGA_B),
@@ -105,20 +105,9 @@ vga_sync u1(
 );
 
 wire SEC_CLK;
-SecTimer secondClock(CLOCK_50, RST, SEC_CLK);
-// Gives a go-ahead to move the Tetromino.
-reg go_ahead;
-always @(posedge SEC_CLK or negedge RST) begin
-    if (RST == 1'b0) begin
-        go_ahead <= 1'b0;
-    end
-    else begin
-        if (go_ahead == 1'b1)
-            go_ahead <= 1'b0;
-        else
-            go_ahead <= 1'b1;
-    end
-end
+reg [2:0] sec;
+reg forceReset;
+SecTimer secondClock(CLOCK_50, RST, sec, forceReset);
 
 // draw_? are decided at the very end of this file
 reg [3:0] draw_r, draw_g, draw_b;
@@ -214,18 +203,17 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
     case (STATE)
         INIT: begin
             if (gameStarted == 1'b1 && init_y == 23) begin
+                we <= 1'b1;
                 init_x <= 5'd0;
                 init_y <= 5'd0;
-                we <= 1'b1;
                 // Prepare for GENERATE state and change state
-                // This is 3'b111 because 1 is added before the condition, making the first one 0
-                draw_tetromino_count <= 3'b111;
+                draw_tetromino_count <= 0;
                 STATE <= GENERATE;
             end
             else begin
+                we <= 1'b0;
                 // Initialize field with white
                 color <= WHITE;
-                we <= 1'b0;
                 x <= init_x;
                 y <= init_y;
                 STATE <= INIT;
@@ -248,10 +236,12 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
             STATE <= DRAW;
         end
         DRAW: begin
+            we <= 1'b1;
             // Tell MOVE_ONE_DOWN that we drew the Tetromino
             erased <= 1'b0;
-            we <= 1'b1;
             STATE <= WRITE_TO_SRAM;
+            // Don't forget to initialize (another place in in ERASE)
+            draw_tetromino_count <= 0;
             case (current_tetromino)
                 I: color <= CYAN;
                 O: color <= YELLOW;
@@ -272,13 +262,13 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
             if (draw_tetromino_count == 3'd4) begin
                 // Disable write
                 we <= 1'b1;
-                //draw_tetromino_count <= 3'b111;
+                draw_tetromino_count <= 0;
                 STATE <= MOVE_ONE_DOWN;
             end
             else begin
-                STATE <= WRITE_TO_SRAM;
                 // Enable write
                 we <= 1'b0;
+                STATE <= WRITE_TO_SRAM;
                 draw_tetromino_count <= draw_tetromino_count + 1;
                 // Draw Tetromino based on pivot
                 case (current_tetromino)
@@ -432,11 +422,12 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
             color <= WHITE;
             // Yes, we erased it
             erased <= 1'b1;
+            // Don't forget to initialize here, too (another place in in DRAW)
+            draw_tetromino_count <= 0;
             // Another note: The state will change to MOVE_ONE_DOWN automatically after WRITE_TO_SRAM state.
             STATE <= WRITE_TO_SRAM;
         end
         MOVE_ONE_DOWN: begin
-            draw_tetromino_count <= 3'd0;
             // TODO: Check if the Tetromino can actually be moved down
             we <= 1'b1;
             /*
@@ -444,15 +435,26 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
                 MOVE_LEFT or MOVE_RIGHT
             end
             */
+            // DEBUG
+            LEDR[2:0] <= sec;
+            LEDR[3] <= erased;
             // Redraw the Tetromino 1 down if current one was erased and if it can move down
-            /*else*/ /*if (erased == 1'b1 && go_ahead == 1'b1) begin
-                tetromino_y <= tetromino_y + 1;
-                STATE <= DRAW;
+            /*else*/ if (sec < 3'd4) begin
+                forceReset <= 1'b0;
             end
             // Otherwise, clear the Tetromino first
             else begin
-                STATE <= ERASE;
-            end*/
+                if (erased == 1'b1) begin
+                    tetromino_y <= tetromino_y + 1;
+                    // Reset timer
+                    forceReset <= 1'b1;
+                    STATE <= DRAW;
+                end
+                else begin
+                    STATE <= ERASE;
+                    forceReset <= 1'b0;
+                end
+            end
         end
     endcase
     end
