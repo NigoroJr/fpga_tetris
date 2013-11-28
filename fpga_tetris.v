@@ -204,7 +204,7 @@ reg erased;
 // Type of check that was requested (TODO: change name)
 reg [2:0] requestMovableCheck;
 // 1 if movable, 0 if not
-reg isMovable;
+reg isMovable, check_done;
 // Something similar to draw_tetromino_count but used for checking
 reg [2:0] check_movable_count;
 // Used to initialize the SRAM
@@ -465,10 +465,11 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
                 // Initialize before changing states
                 check_movable_count <= 3'd0;
                 isMovable <= 1'b1;
+                check_done <= 1'b0;
                 STATE <= CHECK_IF_MOVABLE;
             end
             // If it can't move anymore (in this state, meaning it hit the bottom)
-            else if (isMovable == 1'b0) begin
+            else if (check_done == 1'b1 && isMovable == 1'b0) begin
                 // Reset requestMovableCheck
                 requestMovableCheck <= NONE;
                 // Leave the Tetromino alone and generate a new ones
@@ -506,7 +507,7 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
             we <= 1'b1;
             // Go back to previous state
             // TODO: another case here to decide which state to go back to?
-            if (check_movable_count == 3'd4) begin
+            if (check_done == 1'b1 || check_movable_count == 3'd4) begin
                 check_movable_count <= 3'd0;
                 isReadColor <= 1'b0;
                 STATE <= MOVE_ONE_DOWN;
@@ -517,8 +518,8 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
                 check_movable_count <= check_movable_count + 1;
                 // Make isMovable 0 if next grid is NOT white or within the field
                 isMovable <= (color_read == WHITE)
-                    && read_x >= 0 && read_x < 10
-                    && read_y >= 0 && read_y < 22;
+                    & read_x >= 0 & read_x < 10
+                    & read_y >= 0 & read_y < 22;
                 case (current_tetromino)
                     I: begin
                         case (requestMovableCheck)
@@ -527,18 +528,23 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
                                     3'd0: begin
                                         read_x <= tetromino_x;
                                         read_y <= tetromino_y + 1;
+                                        // Finish if we know that it can't move
+                                        check_done <= ~isMovable;
                                     end
                                     3'd1: begin
                                         read_x <= tetromino_x + 1;
                                         read_y <= tetromino_y + 1;
+                                        check_done <= ~isMovable;
                                     end
                                     3'd2: begin
                                         read_x <= tetromino_x + 2;
                                         read_y <= tetromino_y + 1;
+                                        check_done <= ~isMovable;
                                     end
                                     3'd3: begin
                                         read_x <= tetromino_x + 3;
                                         read_y <= tetromino_y + 1;
+                                        check_done <= 1'b1;
                                     end
                                 endcase
                             end
@@ -560,10 +566,12 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
                                     3'd0: begin
                                         read_x <= tetromino_x + 1;
                                         read_y <= tetromino_y + 2;
+                                        check_done <= ~isMovable;
                                     end
                                     3'd1: begin
                                         read_x <= tetromino_x + 2;
                                         read_y <= tetromino_y + 2;
+                                        check_done <= 1'b1;
                                     end
                                 endcase
                             end
@@ -585,10 +593,12 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
                                     3'd0: begin
                                         read_x <= tetromino_x + 1;
                                         read_y <= tetromino_y + 3;
+                                        check_done <= ~isMovable;
                                     end
                                     3'd1: begin
                                         read_x <= tetromino_x + 2;
                                         read_y <= tetromino_y + 3;
+                                        check_done <= 1'b1;
                                     end
                                 endcase
                             end
@@ -610,10 +620,12 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
                                     3'd0: begin
                                         read_x <= tetromino_x + 1;
                                         read_y <= tetromino_y + 3;
+                                        check_done <= ~isMovable;
                                     end
                                     3'd1: begin
                                         read_x <= tetromino_x + 2;
                                         read_y <= tetromino_y + 3;
+                                        check_done <= 1'b1;
                                     end
                                 endcase
                             end
@@ -635,14 +647,17 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
                                     3'd0: begin
                                         read_x <= tetromino_x;
                                         read_y <= tetromino_y + 2;
+                                        check_done <= ~isMovable;
                                     end
                                     3'd1: begin
                                         read_x <= tetromino_x + 1;
                                         read_y <= tetromino_y + 2;
+                                        check_done <= ~isMovable;
                                     end
                                     3'd2: begin
                                         read_x <= tetromino_x + 2;
                                         read_y <= tetromino_y + 1;
+                                        check_done <= 1'b1;
                                     end
                                 endcase
                             end
@@ -664,14 +679,17 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
                                     3'd0: begin
                                         read_x <= tetromino_x;
                                         read_y <= tetromino_y + 1;
+                                        check_done <= ~isMovable;
                                     end
                                     3'd1: begin
                                         read_x <= tetromino_x + 1;
                                         read_y <= tetromino_y + 2;
+                                        check_done <= ~isMovable;
                                     end
                                     3'd2: begin
                                         read_x <= tetromino_x + 2;
                                         read_y <= tetromino_y + 2;
+                                        check_done <= 1'b1;
                                     end
                                 endcase
                             end
@@ -693,14 +711,17 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
                                     3'd0: begin
                                         read_x <= tetromino_x;
                                         read_y <= tetromino_y + 2;
+                                        check_done <= ~isMovable;
                                     end
                                     3'd1: begin
                                         read_x <= tetromino_x + 1;
                                         read_y <= tetromino_y + 2;
+                                        check_done <= ~isMovable;
                                     end
                                     3'd2: begin
                                         read_x <= tetromino_x + 2;
                                         read_y <= tetromino_y + 2;
+                                        check_done <= 1'b1;
                                     end
                                 endcase
                             end
