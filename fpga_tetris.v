@@ -120,7 +120,8 @@ parameter   INIT = 4'd0,
             WRITE_TO_SRAM = 4'd2,
             DRAW = 4'd3,
             ERASE = 4'd4,
-            MOVE_ONE_DOWN = 4'd5;
+            MOVE_ONE_DOWN = 4'd5,
+            CHECK_IF_MOVABLE = 4'd6;
             /*
             MOVE_LEFT = 4'd6,
             MOVE_RIGHT = 4'd7,
@@ -149,16 +150,26 @@ parameter BLACK     = 16'h0000,
           GREEN     = 16'h00f0,
           RED       = 16'h0f00,
           PURPLE    = 16'h0f0f;
-
+// Type of movability check
+parameter NONE      = 3'd0,
+          DOWN      = 3'd1,
+          LEFT      = 3'd2,
+          RIGHT     = 3'd3,
+          SPIN_L    = 3'd4;
 // Represents the state for FSM
 reg [3:0] STATE;
 
 /*---- SRAM stuff ----*/
-// 1 when disabled, 0 when enabled
+// 1 when disabled, 0 when enabled (all the other boolean variables will follow the "common-sense")
 reg we;
+// 1 when enabled, 0 when disabled
+reg isReadColor;
 reg [15:0] color;
+// Color that was read from the SRAM at address read_x, read_y
+wire [15:0] color_read;
+assign color_read = isReadColor ? SRAM_DQ : 16'h0000;
 assign SRAM_DQ = we ? 16'hzzzz : color;
-assign SRAM_ADDR = we ? {grid_x, grid_y, 8'b0} : {x, y, 8'b0};
+assign SRAM_ADDR = we ? (isReadColor ? {read_x, read_y, 8'b0} : {grid_x, grid_y, 8'b0}) : {x, y, 8'b0};
 assign SRAM_WE_N = we;
 assign SRAM_LB_N = 0;
 assign SRAM_OE_N = 0;
@@ -178,17 +189,24 @@ assign gameStarted = SW[0];
     +------------------+
 */
 // These are something like 2-dimensional arrays. Used when reading from SRAM.
+// read_? are used when you want to read something at a certain address
 wire [4:0] grid_x, grid_y;
 assign grid_x = (mCoord_X - 220) / 20;
 assign grid_y = (mCoord_Y - 20) / 20;
 // Coordinates used when writing to SRAM
-reg [4:0] x, y;
+reg [4:0] x, y, read_x, read_y;
 reg [4:0] tetromino_x, tetromino_y;
 reg [2:0] current_tetromino;
 // Iterate through 0-3 to draw Tetrominoes
 reg [2:0] draw_tetromino_count;
 // Indicates whether the Tetromino was erased or not (i.e. just drawn)
 reg erased;
+// Type of check that was requested (TODO: change name)
+reg [2:0] requestMovableCheck;
+// 1 if movable, 0 if not
+reg isMovable;
+// Something similar to draw_tetromino_count but used for checking
+reg [2:0] check_movable_count;
 // Used to initialize the SRAM
 reg [4:0] init_x, init_y;
 // Calculate next state
@@ -197,6 +215,10 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
         // The following have to be initialized here because it will be used in INIT state
         init_x <= 5'd0;
         init_y <= 5'd0;
+        isReadColor <= 1'b0;
+        // TODO: check if these are really necessary. for now, better safe than sorry :)
+        requestMovableCheck <= 3'd0;
+        isMovable <= 1'b1;
         STATE <= INIT;
     end
     else begin
@@ -428,23 +450,35 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
             STATE <= WRITE_TO_SRAM;
         end
         MOVE_ONE_DOWN: begin
-            // TODO: Check if the Tetromino can actually be moved down
             we <= 1'b1;
+            // This needs to be set to 0 in other MOVE states!
+            isReadColor <= 1'b0;
             /*
             if (there_is_key_input) begin
                 MOVE_LEFT or MOVE_RIGHT
             end
             */
-            // DEBUG
-            LEDR[2:0] <= sec;
-            LEDR[3] <= erased;
-            // Redraw the Tetromino 1 down if current one was erased and if it can move down
-            /*else*/ if (sec < 3'd4) begin
-                forceReset <= 1'b0;
+            // Check if a check hasn't been requested yet
+            if (requestMovableCheck == 3'd0) begin
+                // Request check for "moving down"
+                requestMovableCheck <= DOWN;
+                // Initialize before changing states
+                check_movable_count <= 3'd0;
+                isMovable <= 1'b1;
+                STATE <= CHECK_IF_MOVABLE;
             end
-            // Otherwise, clear the Tetromino first
-            else begin
+            // If it can't move anymore (in this state, meaning it hit the bottom)
+            else if (isMovable == 1'b0) begin
+                // Reset requestMovableCheck
+                requestMovableCheck <= NONE;
+                // Leave the Tetromino alone and generate a new ones
+                STATE <= GENERATE;
+            end
+            // Clear the Tetromino first and redraw
+            else if (sec >= 3'd2) begin
                 if (erased == 1'b1) begin
+                    // Reset requestMovableCheck
+                    requestMovableCheck <= NONE;
                     tetromino_y <= tetromino_y + 1;
                     // Reset timer
                     forceReset <= 1'b1;
@@ -454,6 +488,234 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
                     STATE <= ERASE;
                     forceReset <= 1'b0;
                 end
+            end
+            // Otherwise, take a break for a while
+            else begin
+                forceReset <= 1'b0;
+            end
+        end
+        // Checks if the Tetromino can really move to the next grid
+        CHECK_IF_MOVABLE: begin
+            // Variables:
+            //      Type of request => requestMovableCheck
+            //      Result set to   => isMovable
+            //      Counter         => check_movable_count
+            //      SRAM content    => color_read
+            //      Specify address => read_x, read_y
+
+            we <= 1'b1;
+            // Go back to previous state
+            // TODO: another case here to decide which state to go back to?
+            if (check_movable_count == 3'd4) begin
+                check_movable_count <= 3'd0;
+                isReadColor <= 1'b0;
+                STATE <= MOVE_ONE_DOWN;
+            end
+            else begin
+                // Important in order to *read* from SRAM
+                isReadColor <= 1'b1;
+                check_movable_count <= check_movable_count + 1;
+                // Make isMovable 0 if next grid is NOT white or within the field
+                isMovable <= (color_read == WHITE)
+                    && read_x >= 0 && read_x < 10
+                    && read_y >= 0 && read_y < 22;
+                case (current_tetromino)
+                    I: begin
+                        case (requestMovableCheck)
+                            DOWN: begin
+                                case (check_movable_count)
+                                    3'd0: begin
+                                        read_x <= tetromino_x;
+                                        read_y <= tetromino_y + 1;
+                                    end
+                                    3'd1: begin
+                                        read_x <= tetromino_x + 1;
+                                        read_y <= tetromino_y + 1;
+                                    end
+                                    3'd2: begin
+                                        read_x <= tetromino_x + 2;
+                                        read_y <= tetromino_y + 1;
+                                    end
+                                    3'd3: begin
+                                        read_x <= tetromino_x + 3;
+                                        read_y <= tetromino_y + 1;
+                                    end
+                                endcase
+                            end
+                            LEFT: begin
+                                // TODO
+                            end
+                            RIGHT: begin
+                                // TODO
+                            end
+                            SPIN_L: begin
+                                // TODO
+                            end
+                        endcase
+                    end // End of I
+                    O: begin
+                        case (requestMovableCheck)
+                            DOWN: begin
+                                case (check_movable_count)
+                                    3'd0: begin
+                                        read_x <= tetromino_x + 1;
+                                        read_y <= tetromino_y + 2;
+                                    end
+                                    3'd1: begin
+                                        read_x <= tetromino_x + 2;
+                                        read_y <= tetromino_y + 2;
+                                    end
+                                endcase
+                            end
+                            LEFT: begin
+                                // TODO
+                            end
+                            RIGHT: begin
+                                // TODO
+                            end
+                            SPIN_L: begin
+                                // TODO
+                            end
+                        endcase
+                    end // End of O
+                    L: begin
+                        case (requestMovableCheck)
+                            DOWN: begin
+                                case (check_movable_count)
+                                    3'd0: begin
+                                        read_x <= tetromino_x + 1;
+                                        read_y <= tetromino_y + 3;
+                                    end
+                                    3'd1: begin
+                                        read_x <= tetromino_x + 2;
+                                        read_y <= tetromino_y + 3;
+                                    end
+                                endcase
+                            end
+                            LEFT: begin
+                                // TODO
+                            end
+                            RIGHT: begin
+                                // TODO
+                            end
+                            SPIN_L: begin
+                                // TODO
+                            end
+                        endcase
+                    end // End of L
+                    J: begin
+                        case (requestMovableCheck)
+                            DOWN: begin
+                                case (check_movable_count)
+                                    3'd0: begin
+                                        read_x <= tetromino_x + 1;
+                                        read_y <= tetromino_y + 3;
+                                    end
+                                    3'd1: begin
+                                        read_x <= tetromino_x + 2;
+                                        read_y <= tetromino_y + 3;
+                                    end
+                                endcase
+                            end
+                            LEFT: begin
+                                // TODO
+                            end
+                            RIGHT: begin
+                                // TODO
+                            end
+                            SPIN_L: begin
+                                // TODO
+                            end
+                        endcase
+                    end // End of J
+                    S: begin
+                        case (requestMovableCheck)
+                            DOWN: begin
+                                case (check_movable_count)
+                                    3'd0: begin
+                                        read_x <= tetromino_x;
+                                        read_y <= tetromino_y + 2;
+                                    end
+                                    3'd1: begin
+                                        read_x <= tetromino_x + 1;
+                                        read_y <= tetromino_y + 2;
+                                    end
+                                    3'd2: begin
+                                        read_x <= tetromino_x + 2;
+                                        read_y <= tetromino_y + 1;
+                                    end
+                                endcase
+                            end
+                            LEFT: begin
+                                // TODO
+                            end
+                            RIGHT: begin
+                                // TODO
+                            end
+                            SPIN_L: begin
+                                // TODO
+                            end
+                        endcase
+                    end // End of S
+                    Z: begin
+                        case (requestMovableCheck)
+                            DOWN: begin
+                                case (check_movable_count)
+                                    3'd0: begin
+                                        read_x <= tetromino_x;
+                                        read_y <= tetromino_y + 1;
+                                    end
+                                    3'd1: begin
+                                        read_x <= tetromino_x + 1;
+                                        read_y <= tetromino_y + 2;
+                                    end
+                                    3'd2: begin
+                                        read_x <= tetromino_x + 2;
+                                        read_y <= tetromino_y + 2;
+                                    end
+                                endcase
+                            end
+                            LEFT: begin
+                                // TODO
+                            end
+                            RIGHT: begin
+                                // TODO
+                            end
+                            SPIN_L: begin
+                                // TODO
+                            end
+                        endcase
+                    end // End of Z
+                    T: begin
+                        case (requestMovableCheck)
+                            DOWN: begin
+                                case (check_movable_count)
+                                    3'd0: begin
+                                        read_x <= tetromino_x;
+                                        read_y <= tetromino_y + 2;
+                                    end
+                                    3'd1: begin
+                                        read_x <= tetromino_x + 1;
+                                        read_y <= tetromino_y + 2;
+                                    end
+                                    3'd2: begin
+                                        read_x <= tetromino_x + 2;
+                                        read_y <= tetromino_y + 2;
+                                    end
+                                endcase
+                            end
+                            LEFT: begin
+                                // TODO
+                            end
+                            RIGHT: begin
+                                // TODO
+                            end
+                            SPIN_L: begin
+                                // TODO
+                            end
+                        endcase
+                    end // End of T
+                endcase
             end
         end
     endcase
