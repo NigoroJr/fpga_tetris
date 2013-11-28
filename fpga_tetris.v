@@ -185,7 +185,7 @@ assign grid_y = (mCoord_Y - 20) / 20;
 reg [4:0] x, y;
 reg [4:0] tetromino_x, tetromino_y;
 reg [2:0] current_tetromino;
-// Iterate through 0-3 to draw Tetrominos
+// Iterate through 0-3 to draw Tetrominoes
 reg [2:0] draw_tetromino_count;
 // Indicates whether the Tetromino was erased or not (i.e. just drawn)
 reg erased;
