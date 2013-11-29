@@ -178,7 +178,8 @@ assign SRAM_UB_N = 0;
 wire gameStarted;
 assign gameStarted = SW[0];
 wire move_left_key, move_right_key, spin_left_key;
-MoveKey toLeft(KEY[3], move_left_key, RST);
+MoveKey toLeft(~KEY[3], move_left_key, CLOCK_50, RST);
+MoveKey toRight(~KEY[1], move_right_key, CLOCK_50, RST);
 
 /*
     Use the coordinates and see the field as grids of 20px by 20px
@@ -876,7 +877,7 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
                 if (erased == 1'b1) begin
                     // Reset requestMovableCheck
                     requestMovableCheck <= NONE;
-                    tetromino_x <= tetromino_x + 1;
+                    tetromino_x <= tetromino_x - 1;
                     // Reset timer
                     forceReset <= 1'b1;
                     STATE <= DRAW;
