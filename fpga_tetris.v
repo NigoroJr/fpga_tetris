@@ -117,20 +117,19 @@ assign mVGA_B = {draw_b, 6'b0};
 
 parameter   INIT = 4'd0,
             GENERATE = 4'd1,
+            SET_COLOR = 4'd3,
             WRITE_TO_SRAM = 4'd2,
-            DRAW = 4'd3,
-            ERASE = 4'd4,
-            MOVE_ONE_DOWN = 4'd5,
+            WAIT = 4'd14,
+            REMOVE_COLOR = 4'd4,
             CHECK_IF_MOVABLE = 4'd6,
+            MOVE_ONE_DOWN = 4'd5,
             MOVE_LEFT = 4'd7,
-            MOVE_RIGHT = 4'd8;
-            /*
+            MOVE_RIGHT = 4'd8,
             SPIN_LEFT = 4'd9,
             CHECK_COMPLETE_ROW = 4'd10,
             DELETE_ROW = 4'd11,
             SHIFT_ALL_BLOCKS_ABOVE = 4'd12,
             GAME_OVER = 4'd13;
-            */
 // Each Tetromino has a name
 parameter I = 3'd0,
           O = 3'd1,
@@ -202,7 +201,7 @@ reg [2:0] current_tetromino;
 // Iterate through 0-3 to draw Tetrominoes
 reg [2:0] draw_tetromino_count;
 // Indicates whether the Tetromino was erased or not (i.e. just drawn)
-reg erased;
+reg erased, request_erase;
 // Type of check that was requested (TODO: change name)
 reg [2:0] requestMovableCheck;
 // 1 if movable, 0 if not
@@ -257,14 +256,14 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
             // Use the same "pivot" instead of different ones for each Tetromino
             tetromino_x <= 5'd3;
             tetromino_y <= 5'd2;
-            STATE <= DRAW;
+            STATE <= SET_COLOR;
         end
-        DRAW: begin
+        SET_COLOR: begin
             we <= 1'b1;
             // Tell MOVE_ONE_DOWN that we drew the Tetromino
             erased <= 1'b0;
             STATE <= WRITE_TO_SRAM;
-            // Don't forget to initialize (another place in in ERASE)
+            // Don't forget to initialize (another place in in REMOVE_COLOR)
             draw_tetromino_count <= 0;
             case (current_tetromino)
                 I: color <= CYAN;
@@ -287,12 +286,16 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
                 // Disable write
                 we <= 1'b1;
                 draw_tetromino_count <= 0;
-                // Return to "calling" state
-                case (requestMovableCheck)
-                    LEFT:       STATE <= MOVE_LEFT;
-                    RIGHT:      STATE <= MOVE_RIGHT;
-                    default:    STATE <= MOVE_ONE_DOWN;
-                endcase
+                // If the state was "called" by the REMOVE_COLOR state
+                if (request_erase == 1'b1) begin
+                    STATE <= REMOVE_COLOR;
+                    erased <= 1'b1;
+                    // Note: request_erase is reset in REMOVE_COLOR state
+                end
+                // When it came from the SET_COLOR state
+                else begin
+                    STATE <= WAIT;
+                end
             end
             else begin
                 // Enable write
@@ -444,65 +447,28 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
                 endcase
             end
         end // End of WRITE_TO_SRAM
-        // Erase current Tetromino from the field. Used when moving.
-        ERASE: begin
-            we <= 1'b1;
-            // Note: You could also make a variable `BACKGROUND_COLOR` and set color to that.
-            color <= WHITE;
-            // Yes, we erased it
-            erased <= 1'b1;
-            // Don't forget to initialize here, too (another place in in DRAW)
-            draw_tetromino_count <= 0;
-            // Another note: The state will change to MOVE_ONE_DOWN automatically after WRITE_TO_SRAM state.
-            STATE <= WRITE_TO_SRAM;
-        end
-        MOVE_ONE_DOWN: begin
-            we <= 1'b1;
-            // This needs to be set to 0 in other MOVE states!
-            isReadColor <= 1'b0;
+        WAIT: begin
             // Move when there was key input
             if (move_left_key == 1'b1) begin
-                STATE <= MOVE_LEFT;
-            end
-            else if (move_right_key == 1'b1) begin
-                STATE <= MOVE_RIGHT;
-            end
-
-            // Check if a check hasn't been requested yet
-            else if (requestMovableCheck == 3'd0) begin
-                // Request check for "moving down"
-                requestMovableCheck <= DOWN;
-                // Initialize before changing states
-                check_movable_count <= 3'd0;
-                isMovable <= 1'b1;
-                check_done <= 1'b0;
+                requestMovableCheck <= LEFT;
                 STATE <= CHECK_IF_MOVABLE;
             end
-            // If it can't move anymore (in this state, meaning it hit the bottom)
-            else if (check_done == 1'b1 && isMovable == 1'b0) begin
-                // Reset requestMovableCheck
-                requestMovableCheck <= NONE;
-                // Leave the Tetromino alone and generate a new ones
-                STATE <= GENERATE;
+            else if (move_right_key == 1'b1) begin
+                requestMovableCheck <= RIGHT;
+                STATE <= CHECK_IF_MOVABLE;
             end
-            // Clear the Tetromino first and redraw
-            else if (sec == 3'd1) begin
-                if (erased == 1'b1) begin
-                    // Reset requestMovableCheck
-                    requestMovableCheck <= NONE;
-                    tetromino_y <= tetromino_y + 1;
-                    // Reset timer
-                    forceReset <= 1'b1;
-                    STATE <= DRAW;
-                end
-                else begin
-                    STATE <= ERASE;
-                    forceReset <= 1'b0;
-                end
-            end
-            // Otherwise, take a break for a while
-            else begin
+
+            else if (forceReset == 1'b1) begin
                 forceReset <= 1'b0;
+                STATE <= WAIT;
+            end
+            else if (sec < 3'd1) begin
+                STATE <= WAIT;
+            end
+            // When it waited for a certain amount of time
+            else begin
+                requestMovableCheck <= DOWN;
+                STATE <= CHECK_IF_MOVABLE;
             end
         end
         // Checks if the Tetromino can really move to the next grid
@@ -510,25 +476,31 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
             // Variables:
             //      Type of request => requestMovableCheck
             //      Result set to   => isMovable
-            //      Indicates done  => check_done
             //      Counter         => check_movable_count
             //      SRAM content    => color_read
             //      Specify address => read_x, read_y
 
             we <= 1'b1;
-            // Go back to previous state
-            if (check_movable_count == 3'd3) begin
+            if (check_movable_count == 3'd4) begin
                 check_movable_count <= 3'd0;
                 isReadColor <= 1'b0;
-                check_done <= 1'b1;
-                // Go back to "calling" state
-                case (requestMovableCheck)
-                    DOWN:   STATE <= MOVE_ONE_DOWN;
-                    LEFT:   STATE <= MOVE_LEFT;
-                    RIGHT:  STATE <= MOVE_RIGHT;
-                    // Can't happen
-                    default:STATE <= INIT;
-                endcase
+                if (isMovable == 1'b0) begin
+                    // If it couldn't move downward anymore
+                    if (requestMovableCheck == DOWN) begin
+                        STATE <= GENERATE;
+                    end
+                    // If LEFT or RIGHT was request and wasn't approved, check for downward movement
+                    else begin
+                        // TODO: would move down before 0.5 seconds
+                        requestMovableCheck <= DOWN;
+                        // Note: The timer will be going on while we're in this state because forceReset is not 1
+                        STATE <= WAIT;
+                    end
+                end
+                // If request was approved
+                else begin
+                    STATE <= REMOVE_COLOR;
+                end
             end
             else begin
                 // Important in order to *read* from SRAM
@@ -871,64 +843,57 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
                 endcase
             end
         end // End of CHECK_IF_MOVABLE
-        MOVE_LEFT: begin
+        // Erase current Tetromino from the field. Used when moving.
+        REMOVE_COLOR: begin
             we <= 1'b1;
-            if (check_done == 1'b1 && isMovable == 1'b1) begin
-                if (erased == 1'b1) begin
-                    // Reset requestMovableCheck
-                    requestMovableCheck <= NONE;
-                    tetromino_x <= tetromino_x - 1;
-                    // Reset timer
-                    forceReset <= 1'b1;
-                    STATE <= DRAW;
-                end
-                else begin
-                    STATE <= ERASE;
-                    forceReset <= 1'b0;
-                end
-            end
-            // TODO: should this be if requestMovableCheck == NONE ??
-            else if (check_done == 1'b0) begin
-                // Request check for "moving left"
-                requestMovableCheck <= LEFT;
-                // Initialize before changing states
-                check_movable_count <= 3'd0;
-                isMovable <= 1'b1;
-                check_done <= 1'b0;
-                STATE <= CHECK_IF_MOVABLE;
+            // Note: You could also make a variable `BACKGROUND_COLOR` and set color to that.
+            color <= WHITE;
+            // Don't forget to initialize here, too (another place is in SET_COLOR)
+            draw_tetromino_count <= 0;
+            // Erase grids if it hadn't been erased yet
+            if (erased == 1'b0) begin
+                request_erase <= 1'b1;
+                STATE <= WRITE_TO_SRAM;
             end
             else begin
-                STATE <= MOVE_ONE_DOWN;
+                request_erase <= 1'b0;
+                erased <= 1'b0;
+                // Go to whatever state the transition was approved
+                case (requestMovableCheck)
+                    DOWN:   STATE <= MOVE_ONE_DOWN;
+                    LEFT:   STATE <= MOVE_LEFT;
+                    RIGHT:  STATE <= MOVE_RIGHT;
+                    // Can't happen
+                    default:STATE <= INIT;
+                endcase
             end
+        end
+        MOVE_ONE_DOWN: begin
+            we <= 1'b1;
+            // Reset requestMovableCheck
+            requestMovableCheck <= NONE;
+            tetromino_y <= tetromino_y + 1;
+            // Reset timer
+            forceReset <= 1'b1;
+            STATE <= SET_COLOR;
+        end
+        MOVE_LEFT: begin
+            we <= 1'b1;
+            // Reset requestMovableCheck
+            requestMovableCheck <= NONE;
+            tetromino_x <= tetromino_x - 1;
+            // Reset timer
+            forceReset <= 1'b1;
+            STATE <= SET_COLOR;
         end
         MOVE_RIGHT: begin
             we <= 1'b1;
-            if (check_done == 1'b1 && isMovable == 1'b1) begin
-                if (erased == 1'b1) begin
-                    // Reset requestMovableCheck
-                    requestMovableCheck <= NONE;
-                    tetromino_x <= tetromino_x + 1;
-                    // Reset timer
-                    forceReset <= 1'b1;
-                    STATE <= DRAW;
-                end
-                else begin
-                    STATE <= ERASE;
-                    forceReset <= 1'b0;
-                end
-            end
-            else if (check_done == 1'b0) begin
-                // Request check for "moving right"
-                requestMovableCheck <= RIGHT;
-                // Initialize before changing states
-                check_movable_count <= 3'd0;
-                isMovable <= 1'b1;
-                check_done <= 1'b0;
-                STATE <= CHECK_IF_MOVABLE;
-            end
-            else begin
-                STATE <= MOVE_ONE_DOWN;
-            end
+            // Reset requestMovableCheck
+            requestMovableCheck <= NONE;
+            tetromino_x <= tetromino_x + 1;
+            // Reset timer
+            forceReset <= 1'b1;
+            STATE <= SET_COLOR;
         end
     endcase
     end
