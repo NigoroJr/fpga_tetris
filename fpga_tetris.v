@@ -117,19 +117,19 @@ assign mVGA_B = {draw_b, 6'b0};
 
 parameter   INIT = 4'd0,
             GENERATE = 4'd1,
-            SET_COLOR = 4'd3,
-            WRITE_TO_SRAM = 4'd2,
-            WAIT = 4'd14,
-            REMOVE_COLOR = 4'd4,
+            SET_COLOR = 4'd2,
+            WRITE_TO_SRAM = 4'd3,
+            WAIT = 4'd4,
+            REMOVE_COLOR = 4'd5,
             CHECK_IF_MOVABLE = 4'd6,
-            MOVE_ONE_DOWN = 4'd5,
-            MOVE_LEFT = 4'd7,
-            MOVE_RIGHT = 4'd8,
-            SPIN_LEFT = 4'd9,
-            CHECK_COMPLETE_ROW = 4'd10,
-            DELETE_ROW = 4'd11,
-            SHIFT_ALL_BLOCKS_ABOVE = 4'd12,
-            GAME_OVER = 4'd13;
+            MOVE_ONE_DOWN = 4'd7,
+            MOVE_LEFT = 4'd8,
+            MOVE_RIGHT = 4'd9,
+            SPIN_LEFT = 4'd10,
+            CHECK_COMPLETE_ROW = 4'd11,
+            DELETE_ROW = 4'd12,
+            SHIFT_ALL_BLOCKS_ABOVE = 4'd13,
+            GAME_OVER = 4'd14;
 // Each Tetromino has a name
 parameter I = 3'd0,
           O = 3'd1,
@@ -487,7 +487,8 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
                 if (isMovable == 1'b0) begin
                     // If it couldn't move downward anymore
                     if (requestMovableCheck == DOWN) begin
-                        STATE <= GENERATE;
+                        //STATE <= GENERATE;
+                        STATE <= CHECK_COMPLETE_ROW;
                     end
                     // If LEFT or RIGHT was request and wasn't approved, check for downward movement
                     else begin
@@ -894,6 +895,22 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
             // Reset timer
             forceReset <= 1'b1;
             STATE <= SET_COLOR;
+        end
+        CHECK_COMPLETE_ROW: begin
+            // Go to GENERATE when check is completed
+            if (read_y == 0) begin
+                isReadColor <= 1'b0;
+                STATE <= GENERATE;
+            end
+            else begin
+                isReadColor <= 1'b1;
+            end
+        end
+        DELETE_ROW: begin
+        end
+        SHIFT_ALL_BLOCKS_ABOVE: begin
+        end
+        GAME_OVER: begin
         end
     endcase
     end
