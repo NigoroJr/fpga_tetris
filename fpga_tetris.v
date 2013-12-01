@@ -489,6 +489,8 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
                     if (requestMovableCheck == DOWN) begin
                         //STATE <= GENERATE;
                         STATE <= CHECK_COMPLETE_ROW;
+                        read_x <= 0;
+                        read_y <= 22;
                     end
                     // If LEFT or RIGHT was request and wasn't approved, check for downward movement
                     else begin
@@ -897,16 +899,50 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
             STATE <= SET_COLOR;
         end
         CHECK_COMPLETE_ROW: begin
-            // Go to GENERATE when check is completed
-            if (read_y == 0) begin
+            we <= 1'b1;
+            // Go to GENERATE when check reached the top row
+            if (read_y == 0 && read_x == 10) begin
                 isReadColor <= 1'b0;
                 STATE <= GENERATE;
             end
             else begin
                 isReadColor <= 1'b1;
+                // When it reached the end of the row
+                if (read_x == 10) begin
+                    read_x <= 0;
+                    if (color_read == WHITE)
+                        read_y <= read_y - 1;
+                    // If it's a complete row
+                    else begin
+                        x <= 0;
+                        STATE <= DELETE_ROW;
+                    end
+                end
+                else begin
+                    // That row is not complete
+                    if (color_read == WHITE) begin
+                        read_x <= 0;
+                        read_y <= read_y - 1;
+                    end
+                    else begin
+                        read_x <= read_x + 1;
+                    end
+                end
             end
         end
         DELETE_ROW: begin
+            // Enable write
+            we <= 1'b0;
+            isReadColor <= 1'b0;
+            if (x == 10) begin
+                read_y <= read_y - 1;
+                STATE <= CHECK_COMPLETE_ROW;
+            end
+            else begin
+                x <= x + 1;
+                y <= read_y;
+                color <= WHITE;
+            end
         end
         SHIFT_ALL_BLOCKS_ABOVE: begin
         end
