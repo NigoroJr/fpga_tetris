@@ -103,7 +103,29 @@ vga_sync u1(
    .VGA_SYNC(VGA_SYNC),
    .VGA_BLANK(VGA_BLANK)
 );
-
+/*  Notes
+    ---------------------------------------------------
+    DO NOT use TABS instead of spaces!!!!!!!!!!!!!!!
+    Use 4 spaces as the tabwidth!!!!!!!!!!!!!!!!
+    If you're using the awesome, one-and-only editor, Vim, execute:
+    :se ts=4
+    :se sw=4
+    :se et
+    :se ts=4
+    ---------------------------------------------------
+    It seems like structures like the following snippet
+    are causing problems.
+    if (counter == 5) begin
+        counter <= 0;
+        STATE <= FOO;
+    end
+    else begin
+        counter <= counter + 1;
+        STATE <= THIS_STATE;
+    end
+    
+    Fix this by adding an "adding" state which simply adds 1 to that counter.
+*/
 wire SEC_CLK;
 reg [2:0] sec;
 reg forceReset;
@@ -868,7 +890,7 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
                     DOWN:   STATE <= MOVE_ONE_DOWN;
                     LEFT:   STATE <= MOVE_LEFT;
                     RIGHT:  STATE <= MOVE_RIGHT;
-                    // Can't happen
+                    // Can't happen (a.k.a. TODO: Find out why this happens...)
                     default:STATE <= MOVE_ONE_DOWN;
                 endcase
             end
@@ -920,7 +942,7 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
                     // If it's a complete row
                     else begin
                         // Prepare to delete
-                        x <= 5'd0;
+                        x <= -5'd1;
                         STATE <= DELETE_ROW;
                     end
                 end
