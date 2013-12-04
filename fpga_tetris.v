@@ -225,7 +225,7 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
     else begin
     case (STATE)
         INIT: begin
-            if (gameStarted == 1'b1 && init_y == 23) begin
+            if (gameStarted == 1'b1 && init_y == 22) begin
                 we <= 1'b1;
                 init_x <= 5'd0;
                 init_y <= 5'd0;
@@ -471,7 +471,9 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
                 STATE <= CHECK_IF_MOVABLE;
             end
         end
-        // Checks if the Tetromino can really move to the next grid
+        /*  Checks if the Tetromino can really move to the next grid
+            TODO: Add explanation of how this works
+        */
         CHECK_IF_MOVABLE: begin
             // Variables:
             //      Type of request => requestMovableCheck
@@ -489,10 +491,10 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
                     if (requestMovableCheck == DOWN) begin
                         //STATE <= GENERATE;
                         STATE <= CHECK_COMPLETE_ROW;
-                        read_x <= 0;
-                        read_y <= 22;
+                        read_x <= 5'd0;
+                        read_y <= 5'd22;
                     end
-                    // If LEFT or RIGHT was request and wasn't approved, check for downward movement
+                    // If LEFT or RIGHT was requested and wasn't approved, check for downward movement
                     else begin
                         // TODO: would move down before 0.5 seconds
                         requestMovableCheck <= DOWN;
@@ -547,7 +549,7 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
                             RIGHT: begin
                                 case (check_movable_count)
                                     3'd0: begin
-                                        read_x <= tetromino_x + 1;
+                                        read_x <= tetromino_x + 4;
                                         read_y <= tetromino_y;
                                     end
                                 endcase
@@ -867,7 +869,7 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
                     LEFT:   STATE <= MOVE_LEFT;
                     RIGHT:  STATE <= MOVE_RIGHT;
                     // Can't happen
-                    default:STATE <= INIT;
+                    default:STATE <= MOVE_ONE_DOWN;
                 endcase
             end
         end
@@ -899,33 +901,37 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
             STATE <= SET_COLOR;
         end
         CHECK_COMPLETE_ROW: begin
+            // Disable write
             we <= 1'b1;
             // Go to GENERATE when check reached the top row
-            if (read_y == 0 && read_x == 10) begin
+            // TODO: Find out why this doesn't work for the second condition of if statement
+            if (read_y == -5'd1 || (read_y <= 5'd0 && read_x >= 5'd9)) begin
                 isReadColor <= 1'b0;
                 STATE <= GENERATE;
             end
             else begin
                 isReadColor <= 1'b1;
                 // When it reached the end of the row
-                if (read_x == 10) begin
-                    read_x <= 0;
-                    if (color_read == WHITE)
-                        read_y <= read_y - 1;
+                if (read_x == 5'd9) begin
+                    read_x <= 5'd0;
+                    if (color_read == WHITE) begin
+                        read_y <= read_y - 5'd1;
+                    end
                     // If it's a complete row
                     else begin
-                        x <= 0;
+                        // Prepare to delete
+                        x <= 5'd0;
                         STATE <= DELETE_ROW;
                     end
                 end
                 else begin
                     // That row is not complete
                     if (color_read == WHITE) begin
-                        read_x <= 0;
-                        read_y <= read_y - 1;
+                        read_x <= 5'd0;
+                        read_y <= read_y - 5'd1;
                     end
                     else begin
-                        read_x <= read_x + 1;
+                        read_x <= read_x + 5'd1;
                     end
                 end
             end
@@ -934,7 +940,7 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
             // Enable write
             we <= 1'b0;
             isReadColor <= 1'b0;
-            if (x == 10) begin
+            if (x == 9) begin
                 read_y <= read_y - 1;
                 STATE <= CHECK_COMPLETE_ROW;
             end
@@ -954,7 +960,9 @@ end
 
 // Show content on SRAM
 always @(*) begin
-    LEDR = move_left_key;
+    //LEDR = {read_x, read_y, STATE};
+    LEDR[0] = read_y == -5'd1;
+    LEDR[1] = read_y == 5'd11111;
     // Paint in black if it's outside the field
     if ((mCoord_X < 220 || (mCoord_X >= 420 && mCoord_X < 640))
         // 60 not 20 because the first 2 "grids" are not shown
