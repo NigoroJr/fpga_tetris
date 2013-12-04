@@ -107,7 +107,7 @@ vga_sync u1(
     ---------------------------------------------------
     DO NOT use TABS instead of spaces!!!!!!!!!!!!!!!
     Use 4 spaces as the tabwidth!!!!!!!!!!!!!!!!
-    If you're using the awesome, one-and-only editor, Vim, execute:
+    If you're using the great, mighty, awesome, one-and-only editor, Vim, execute:
     :se ts=4
     :se sw=4
     :se et
@@ -125,6 +125,12 @@ vga_sync u1(
     end
     
     Fix this by adding an "adding" state which simply adds 1 to that counter.
+    ---------------------------------------------------
+    Idea:
+    Add a variable called PREVIOUS_STATE and check which state "called" the current state.
+    This variable can be used to determine whether it's the first iteration in this state or not.
+    e.g. If the previous state was something else, initialize variables with 0 and set prev state
+    to this state, else, do counting or whatever you want to do.
 */
 wire SEC_CLK;
 reg [2:0] sec;
@@ -137,21 +143,23 @@ assign mVGA_R = {draw_r, 6'b0};
 assign mVGA_G = {draw_g, 6'b0};
 assign mVGA_B = {draw_b, 6'b0};
 
-parameter   INIT = 4'd0,
-            GENERATE = 4'd1,
-            SET_COLOR = 4'd2,
-            WRITE_TO_SRAM = 4'd3,
-            WAIT = 4'd4,
-            REMOVE_COLOR = 4'd5,
-            CHECK_IF_MOVABLE = 4'd6,
-            MOVE_ONE_DOWN = 4'd7,
-            MOVE_LEFT = 4'd8,
-            MOVE_RIGHT = 4'd9,
-            SPIN_LEFT = 4'd10,
-            CHECK_COMPLETE_ROW = 4'd11,
-            DELETE_ROW = 4'd12,
-            SHIFT_ALL_BLOCKS_ABOVE = 4'd13,
-            GAME_OVER = 4'd14;
+parameter   INIT = 5'd0,
+            GENERATE = 5'd1,
+            SET_COLOR = 5'd2,
+            WRITE_TO_SRAM = 5'd3,
+            WAIT = 5'd4,
+            REMOVE_COLOR = 5'd5,
+            CHECK_IF_MOVABLE = 5'd6,
+            MOVE_ONE_DOWN = 5'd7,
+            MOVE_LEFT = 5'd8,
+            MOVE_RIGHT = 5'd9,
+            SPIN_LEFT = 5'd10,
+            CHECK_COMPLETE_ROW = 5'd11,
+            DELETE_ROW = 5'd12,
+            SHIFT_ALL_BLOCKS_ABOVE = 5'd13,
+            SHIFT_BLOCKS_READ_ABOVE = 5'd14,
+            SHIFT_BLOCKS_WRITE_TO_CURRENT = 5'd15,
+            GAME_OVER = 5'd16;
 // Each Tetromino has a name
 parameter I = 3'd0,
           O = 3'd1,
@@ -185,6 +193,8 @@ reg we;
 // 1 when enabled, 0 when disabled
 reg isReadColor;
 reg [15:0] color;
+// Color read from the grid right above the one that is going to be replaced. Used when shifting "all the above".
+reg [15:0] temp_color;
 // Color that was read from the SRAM at address read_x, read_y
 wire [15:0] color_read;
 assign color_read = isReadColor ? SRAM_DQ : 16'h0000;
@@ -217,7 +227,7 @@ wire [4:0] grid_x, grid_y;
 assign grid_x = (mCoord_X - 220) / 20;
 assign grid_y = (mCoord_Y - 20) / 20;
 // Coordinates used when writing to SRAM
-reg [4:0] x, y, read_x, read_y;
+reg [4:0] x, y, read_x, read_y, shift_count_x, shift_count_y, deleted_row;
 reg [4:0] tetromino_x, tetromino_y;
 reg [2:0] current_tetromino;
 // Iterate through 0-3 to draw Tetrominoes
@@ -963,8 +973,13 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
             we <= 1'b0;
             isReadColor <= 1'b0;
             if (x == 9) begin
-                read_y <= read_y - 1;
-                STATE <= CHECK_COMPLETE_ROW;
+                //read_y <= read_y - 1;
+                //STATE <= CHECK_COMPLETE_ROW;
+                shift_count_x <= -5'd1;
+                shift_count_y <= read_y;
+                // Save the position of the deleted row because read_y will be changed
+                deleted_row <= read_y;
+                STATE <= SHIFT_ALL_BLOCKS_ABOVE;
             end
             else begin
                 x <= x + 1;
@@ -972,7 +987,51 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
                 color <= WHITE;
             end
         end
+        // This state is the master of the 2 states: SHIFT_BLOCKS_READ_ABOVE and SHIFT_BLOCKS_WRITE_TO_CURRENT
         SHIFT_ALL_BLOCKS_ABOVE: begin
+            // Disable write
+            we <= 1'b1;
+            isReadColor <= 1'b0;
+            // Note: Shifting starts from the line that was erased
+            // Ends at the second-from-top line (top line is -5'd1 and when it exit state when entering the top row)
+            /*if (shift_count_y == -5'd1) begin
+                // Check for complete rows from the row above
+                read_y <= deleted_row - 5'd1;
+                STATE <= CHECK_COMPLETE_ROW;
+            end
+            else begin*/
+                //STATE <= SHIFT_BLOCKS_READ_ABOVE;
+                if (shift_count_x == 5'd9) begin
+                    shift_count_x <= 5'd0;
+                    //shift_count_y <= shift_count_y - 1;
+                    // DEBUG
+                    STATE <= GENERATE;
+                end
+                else begin
+                    shift_count_x <= shift_count_x + 1;
+                    // DEBUG
+                    STATE <= SHIFT_BLOCKS_READ_ABOVE;
+                end
+            //end
+        end
+        SHIFT_BLOCKS_READ_ABOVE: begin
+            // Disable write
+            we <= 1'b1;
+            // Yes, we're reading color
+            isReadColor <= 1'b1;
+            temp_color <= color_read;
+            read_x <= shift_count_x;
+            read_y <= shift_count_y - 1;
+            // Off to shifting we go
+            STATE <= SHIFT_BLOCKS_WRITE_TO_CURRENT;
+        end
+        SHIFT_BLOCKS_WRITE_TO_CURRENT: begin
+            we <= 1'b0;
+            isReadColor <= 1'b0;
+            x <= shift_count_x;
+            y <= shift_count_y;
+            color <= temp_color;
+            STATE <= SHIFT_ALL_BLOCKS_ABOVE;
         end
         GAME_OVER: begin
         end
@@ -982,9 +1041,9 @@ end
 
 // Show content on SRAM
 always @(*) begin
-    //LEDR = {read_x, read_y, STATE};
-    LEDR[0] = read_y == -5'd1;
-    LEDR[1] = read_y == 5'd11111;
+    LEDR = {shift_count_x, shift_count_y, STATE};
+    //LEDR[0] = read_y == -5'd1;
+    //LEDR[1] = read_y == 5'd11111;
     // Paint in black if it's outside the field
     if ((mCoord_X < 220 || (mCoord_X >= 420 && mCoord_X < 640))
         // 60 not 20 because the first 2 "grids" are not shown
