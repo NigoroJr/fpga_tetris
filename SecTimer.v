@@ -1,5 +1,5 @@
 module SecTimer(clk, rst, sec, forceReset);
-    // Increments the `sec` every 25*10^6 clocks (0.5 sec)
+    // Increments the `sec` every 10*10^6 clocks (0.2 sec)
     // Use 50MHz clock!
     input clk, rst;
     input forceReset;
@@ -15,7 +15,7 @@ module SecTimer(clk, rst, sec, forceReset);
             if (forceReset == 1'b1) begin
                 sec <= 3'b0;
             end
-            else if (count == 32'd25000000) begin
+            else if (count == 32'd10000000) begin
                 sec <= sec + 1;
                 count <= 32'b0;
             end

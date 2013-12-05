@@ -143,23 +143,25 @@ assign mVGA_R = {draw_r, 6'b0};
 assign mVGA_G = {draw_g, 6'b0};
 assign mVGA_B = {draw_b, 6'b0};
 
-parameter   INIT = 5'd0,
-            GENERATE = 5'd1,
-            SET_COLOR = 5'd2,
-            WRITE_TO_SRAM = 5'd3,
-            WAIT = 5'd4,
-            REMOVE_COLOR = 5'd5,
-            CHECK_IF_MOVABLE = 5'd6,
-            MOVE_ONE_DOWN = 5'd7,
-            MOVE_LEFT = 5'd8,
-            MOVE_RIGHT = 5'd9,
-            SPIN_LEFT = 5'd10,
-            CHECK_COMPLETE_ROW = 5'd11,
-            DELETE_ROW = 5'd12,
-            SHIFT_ALL_BLOCKS_ABOVE = 5'd13,
-            SHIFT_BLOCKS_READ_ABOVE = 5'd14,
-            SHIFT_BLOCKS_WRITE_TO_CURRENT = 5'd15,
-            GAME_OVER = 5'd16;
+parameter   INIT = 6'd0,
+            GENERATE = 6'd1,
+            SET_COLOR = 6'd2,
+            WRITE_TO_SRAM = 6'd3,
+            WAIT = 6'd4,
+            REMOVE_COLOR = 6'd5,
+            CHECK_IF_MOVABLE = 6'd6,
+            MOVE_ONE_DOWN = 6'd7,
+            MOVE_LEFT = 6'd8,
+            MOVE_RIGHT = 6'd9,
+            SPIN_LEFT = 6'd10,
+            CHECK_COMPLETE_ROW = 6'd11,
+            DELETE_ROW = 6'd12,
+            SHIFT_ALL_BLOCKS_ABOVE = 6'd13,
+            SHIFT_BLOCKS_READ_ABOVE = 6'd14,
+            SHIFT_BLOCKS_WRITE_TO_CURRENT = 6'd15,
+            GAME_OVER = 6'd16,
+            INCREMENT_SHIFT_COUNT_Y = 6'd17,
+            INCREMENT_SHIFT_COUNT_X = 6'd18;
 // Each Tetromino has a name
 parameter I = 3'd0,
           O = 3'd1,
@@ -193,13 +195,11 @@ reg we;
 // 1 when enabled, 0 when disabled
 reg isReadColor;
 reg [15:0] color;
-// Color read from the grid right above the one that is going to be replaced. Used when shifting "all the above".
-reg [15:0] temp_color;
 // Color that was read from the SRAM at address read_x, read_y
 wire [15:0] color_read;
 assign color_read = isReadColor ? SRAM_DQ : 16'h0000;
 assign SRAM_DQ = we ? 16'hzzzz : color;
-assign SRAM_ADDR = we ? (isReadColor ? {read_x, read_y, 8'b0} : {grid_x, grid_y, 8'b0}) : {x, y, 8'b0};
+assign SRAM_ADDR = we ? (isReadColor ? {read_x, read_y, 6'b0} : {grid_x, grid_y, 6'b0}) : {x, y, 6'b0};
 assign SRAM_WE_N = we;
 assign SRAM_LB_N = 0;
 assign SRAM_OE_N = 0;
@@ -223,12 +223,12 @@ MoveKey toRight(~KEY[1], move_right_key, CLOCK_50, RST);
 */
 // These are something like 2-dimensional arrays. Used when reading from SRAM.
 // read_? are used when you want to read something at a certain address
-wire [4:0] grid_x, grid_y;
+wire [5:0] grid_x, grid_y;
 assign grid_x = (mCoord_X - 220) / 20;
 assign grid_y = (mCoord_Y - 20) / 20;
 // Coordinates used when writing to SRAM
-reg [4:0] x, y, read_x, read_y, shift_count_x, shift_count_y, deleted_row;
-reg [4:0] tetromino_x, tetromino_y;
+reg [5:0] x, y, read_x, read_y, shift_count_x, shift_count_y, deleted_row;
+reg [5:0] tetromino_x, tetromino_y;
 reg [2:0] current_tetromino;
 // Iterate through 0-3 to draw Tetrominoes
 reg [2:0] draw_tetromino_count;
@@ -241,13 +241,13 @@ reg isMovable, check_done;
 // Something similar to draw_tetromino_count but used for checking
 reg [2:0] check_movable_count;
 // Used to initialize the SRAM
-reg [4:0] init_x, init_y;
+reg [5:0] init_x, init_y;
 // Calculate next state
 always @(posedge VGA_CTRL_CLK or negedge RST) begin
     if (RST == 1'b0) begin
         // The following have to be initialized here because it will be used in INIT state
-        init_x <= 5'd0;
-        init_y <= 5'd0;
+        init_x <= 6'd0;
+        init_y <= 6'd0;
         isReadColor <= 1'b0;
         // TODO: check if these are really necessary. for now, better safe than sorry :)
         requestMovableCheck <= 3'd0;
@@ -257,10 +257,11 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
     else begin
     case (STATE)
         INIT: begin
-            if (gameStarted == 1'b1 && init_y == 22) begin
+            dbg <= 4'b0;
+            if (gameStarted == 1'b1 && init_y == 6'd22) begin
                 we <= 1'b1;
-                init_x <= 5'd0;
-                init_y <= 5'd0;
+                init_x <= 6'd0;
+                init_y <= 6'd0;
                 // Prepare for GENERATE state and change state
                 draw_tetromino_count <= 0;
                 STATE <= GENERATE;
@@ -272,7 +273,7 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
                 x <= init_x;
                 y <= init_y;
                 STATE <= INIT;
-                if (init_x == 10) begin
+                if (init_x == 6'd10) begin
                     init_x <= 0;
                     init_y <= init_y + 1;
                 end
@@ -286,8 +287,8 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
             // TODO: get random number
             current_tetromino <= SW[17:15];
             // Use the same "pivot" instead of different ones for each Tetromino
-            tetromino_x <= 5'd3;
-            tetromino_y <= 5'd2;
+            tetromino_x <= 6'd3;
+            tetromino_y <= 6'd2;
             STATE <= SET_COLOR;
         end
         SET_COLOR: begin
@@ -523,8 +524,8 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
                     if (requestMovableCheck == DOWN) begin
                         //STATE <= GENERATE;
                         STATE <= CHECK_COMPLETE_ROW;
-                        read_x <= 5'd0;
-                        read_y <= 5'd22;
+                        read_x <= 6'd0;
+                        read_y <= 6'd22;
                     end
                     // If LEFT or RIGHT was requested and wasn't approved, check for downward movement
                     else begin
@@ -936,55 +937,57 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
             // Disable write
             we <= 1'b1;
             // Go to GENERATE when check reached the top row
-            // TODO: Find out why this doesn't work for the second condition of if statement
-            if (read_y == -5'd1 || (read_y <= 5'd0 && read_x >= 5'd9)) begin
+            if (read_y == 6'd0) begin
                 isReadColor <= 1'b0;
                 STATE <= GENERATE;
             end
             else begin
                 isReadColor <= 1'b1;
                 // When it reached the end of the row
-                if (read_x == 5'd9) begin
-                    read_x <= 5'd0;
+                if (read_x == 6'd9) begin
+                    read_x <= 6'd0;
                     if (color_read == WHITE) begin
-                        read_y <= read_y - 5'd1;
+                        read_y <= read_y - 6'd1;
                     end
                     // If it's a complete row
                     else begin
                         // Prepare to delete
-                        x <= -5'd1;
+                        x <= -6'd1;
                         STATE <= DELETE_ROW;
                     end
                 end
                 else begin
                     // That row is not complete
                     if (color_read == WHITE) begin
-                        read_x <= 5'd0;
-                        read_y <= read_y - 5'd1;
+                        read_x <= 6'd0;
+                        read_y <= read_y - 6'd1;
                     end
                     else begin
-                        read_x <= read_x + 5'd1;
+                        read_x <= read_x + 6'd1;
                     end
                 end
             end
         end
         DELETE_ROW: begin
-            // Enable write
-            we <= 1'b0;
             isReadColor <= 1'b0;
-            if (x == 9) begin
+            if (x == 6'd9) begin
+                we <= 1'b1;
                 //read_y <= read_y - 1;
                 //STATE <= CHECK_COMPLETE_ROW;
-                shift_count_x <= -5'd1;
-                shift_count_y <= read_y;
+                shift_count_x <= -6'd1;
+                // +1 because read_y gets decremented before the first evaluation
+                shift_count_y <= read_y + 1;
                 // Save the position of the deleted row because read_y will be changed
                 deleted_row <= read_y;
                 STATE <= SHIFT_ALL_BLOCKS_ABOVE;
             end
             else begin
+                // Enable write
+                we <= 1'b0;
                 x <= x + 1;
                 y <= read_y;
                 color <= WHITE;
+                STATE <= DELETE_ROW;
             end
         end
         // This state is the master of the 2 states: SHIFT_BLOCKS_READ_ABOVE and SHIFT_BLOCKS_WRITE_TO_CURRENT
@@ -993,33 +996,43 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
             we <= 1'b1;
             isReadColor <= 1'b0;
             // Note: Shifting starts from the line that was erased
-            // Ends at the second-from-top line (top line is -5'd1 and when it exit state when entering the top row)
-            /*if (shift_count_y == -5'd1) begin
-                // Check for complete rows from the row above
-                read_y <= deleted_row - 5'd1;
+            // Ends at the second-from-top line (top line is -6'd1 and when it exit state when entering the top row)
+            if (read_y == 6'd0) begin
+                // Restore read_y
+                read_y <= deleted_row;
                 STATE <= CHECK_COMPLETE_ROW;
             end
-            else begin*/
-                //STATE <= SHIFT_BLOCKS_READ_ABOVE;
-                if (shift_count_x == 5'd9) begin
-                    shift_count_x <= 5'd0;
-                    //shift_count_y <= shift_count_y - 1;
-                    // DEBUG
-                    STATE <= GENERATE;
-                end
-                else begin
-                    shift_count_x <= shift_count_x + 1;
-                    // DEBUG
-                    STATE <= SHIFT_BLOCKS_READ_ABOVE;
-                end
-            //end
+            else begin
+                dbg <= 8'h0f;
+                STATE <= INCREMENT_SHIFT_COUNT_Y;
+                /********************************************************
+                    Debug LED turns on but the state does not change.
+                ********************************************************/
+            end
+        end
+        INCREMENT_SHIFT_COUNT_Y: begin
+            dbg <= 8'hff;
+            shift_count_y <= shift_count_y + 1;
+            STATE <= INCREMENT_SHIFT_COUNT_Y;
+        end
+        INCREMENT_SHIFT_COUNT_X: begin
+            we <= 1'b1;
+            isReadColor <= 1'b0;
+            if (shift_count_x == 6'd10) begin
+                shift_count_x <= 0;
+                STATE <= SHIFT_ALL_BLOCKS_ABOVE;
+            end
+            else begin
+                shift_count_x <= shift_count_x + 1;
+                STATE <= SHIFT_BLOCKS_READ_ABOVE;
+            end
         end
         SHIFT_BLOCKS_READ_ABOVE: begin
             // Disable write
             we <= 1'b1;
             // Yes, we're reading color
             isReadColor <= 1'b1;
-            temp_color <= color_read;
+            color <= color_read;
             read_x <= shift_count_x;
             read_y <= shift_count_y - 1;
             // Off to shifting we go
@@ -1030,20 +1043,20 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
             isReadColor <= 1'b0;
             x <= shift_count_x;
             y <= shift_count_y;
-            color <= temp_color;
-            STATE <= SHIFT_ALL_BLOCKS_ABOVE;
+            // Color was defined in the previous state
+            STATE <= INCREMENT_SHIFT_COUNT_X;
         end
         GAME_OVER: begin
         end
     endcase
     end
 end
-
+reg [7:0] dbg;
 // Show content on SRAM
 always @(*) begin
-    LEDR = {shift_count_x, shift_count_y, STATE};
-    //LEDR[0] = read_y == -5'd1;
-    //LEDR[1] = read_y == 5'd11111;
+    LEDR = {dbg};
+    //LEDR[0] = read_y == -6'd1;
+    //LEDR[1] = read_y == 6'd11111;
     // Paint in black if it's outside the field
     if ((mCoord_X < 220 || (mCoord_X >= 420 && mCoord_X < 640))
         // 60 not 20 because the first 2 "grids" are not shown
