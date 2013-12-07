@@ -208,7 +208,8 @@ wire move_left_key, move_right_key, spin_left_key;
 MoveKey toLeft(~KEY[3], move_left_key, CLOCK_50, RST);
 MoveKey toRight(~KEY[1], move_right_key, CLOCK_50, RST);
 MoveKey toSpinLeft(~KEY[2], spin_left_key, CLOCK_50, RST);
-
+// Generate random tetromino every clock
+RandomTetromino rand(CLOCK_50, RST, random_tetromino);
 /*
     Use the coordinates and see the field as grids of 20px by 20px
     |<-220->|
@@ -227,6 +228,7 @@ assign grid_y = (mCoord_Y - 20) / 20;
 reg [5:0] x, y, read_x, read_y, shift_count_x, shift_count_y, deleted_row;
 reg [5:0] tetromino_x, tetromino_y;
 reg [2:0] current_tetromino;
+wire [2:0] random_tetromino;
 // Iterate through 0-3 to draw Tetrominoes
 reg [2:0] draw_tetromino_count;
 // Indicates whether the Tetromino was erased or not (i.e. just drawn)
@@ -280,8 +282,8 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
         GENERATE: begin
             spin_state <= ORIG;
             we <= 1'b1;
-            // TODO: get random number
-            current_tetromino <= SW[17:15];
+            //current_tetromino <= SW[17:15];
+            current_tetromino <= random_tetromino;
             // Set appearing position
             tetromino_x <= 6'd3;
             tetromino_y <= 6'd1;
