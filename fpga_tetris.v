@@ -107,24 +107,12 @@ vga_sync u1(
     ---------------------------------------------------
     DO NOT use TABS instead of spaces!!!!!!!!!!!!!!!
     Use 4 spaces as the tabwidth!!!!!!!!!!!!!!!!
-    If you're using the great, mighty, awesome, one-and-only editor, Vim, execute:
+    If you're using the great, mighty, awesome,
+    one-and-only editor, Vim, execute:
     :se ts=4
     :se sw=4
     :se et
     :se ts=4
-    ---------------------------------------------------
-    It seems like structures like the following snippet
-    are causing problems.
-    if (counter == 5) begin
-        counter <= 0;
-        STATE <= FOO;
-    end
-    else begin
-        counter <= counter + 1;
-        STATE <= THIS_STATE;
-    end
-    
-    Fix this by adding an "adding" state which simply adds 1 to that counter.
     ---------------------------------------------------
     Idea:
     Add a variable called PREVIOUS_STATE and check which state "called" the current state.
@@ -190,6 +178,12 @@ parameter NONE      = 3'd0,
           SPIN_L    = 3'd4;
 // Represents the state for FSM
 reg [4:0] STATE;
+// Represents the state of rotation
+reg [1:0] spin_state;
+parameter ORIG = 2'd0,
+			 L_1	= 2'd1,
+			 L_2	= 2'd2,
+			 L_3	= 3'd3;
 
 /*---- SRAM stuff ----*/
 // 1 when disabled, 0 when enabled (all the other boolean variables will follow the "common-sense")
@@ -255,12 +249,13 @@ always @(posedge CLOCK_50 or negedge RST) begin
         // TODO: check if these are really necessary. for now, better safe than sorry :)
         requestMovableCheck <= 3'd0;
         isMovable <= 1'b1;
+        spin_state <= ORIG;
         STATE <= INIT;
+        dbg <= 1'b0;
     end
     else begin
     case (STATE)
         INIT: begin
-            dbg <= 4'b0;
             if (gameStarted == 1'b1 && init_y == 6'd22) begin
                 we <= 1'b1;
                 init_x <= 6'd0;
@@ -296,7 +291,7 @@ always @(posedge CLOCK_50 or negedge RST) begin
         end
         SET_COLOR: begin
             we <= 1'b1;
-            // Tell MOVE_ONE_DOWN that we drew the Tetromino
+            // Tell WRITE_TO_SRAM that we drew the Tetromino
             erased <= 1'b0;
             STATE <= WRITE_TO_SRAM;
             // Don't forget to initialize (another place in in REMOVE_COLOR)
@@ -341,26 +336,51 @@ always @(posedge CLOCK_50 or negedge RST) begin
                 // Draw Tetromino based on pivot
                 case (current_tetromino)
                     I: begin
-                        case (draw_tetromino_count)
-                            3'd0: begin
-                                x <= tetromino_x;
-                                y <= tetromino_y + 1;
+                        case (spin_state % 2)
+                            ORIG: begin
+                                case (draw_tetromino_count)
+                                    3'd0: begin
+                                        x <= tetromino_x;
+                                        y <= tetromino_y + 1;
+                                    end
+                                    3'd1: begin
+                                        x <= tetromino_x + 1;
+                                        y <= tetromino_y + 1;
+                                    end
+                                    3'd2: begin
+                                        x <= tetromino_x + 2;
+                                        y <= tetromino_y + 1;
+                                    end
+                                    3'd3: begin
+                                        x <= tetromino_x + 3;
+                                        y <= tetromino_y + 1;
+                                    end
+                                endcase
                             end
-                            3'd1: begin
-                                x <= tetromino_x + 1;
-                                y <= tetromino_y + 1;
-                            end
-                            3'd2: begin
-                                x <= tetromino_x + 2;
-                                y <= tetromino_y + 1;
-                            end
-                            3'd3: begin
-                                x <= tetromino_x + 3;
-                                y <= tetromino_y + 1;
+                            L_1: begin
+                                case (draw_tetromino_count)
+                                    3'd0: begin
+                                        x <= tetromino_x + 1;
+                                        y <= tetromino_y;
+                                    end
+                                    3'd1: begin
+                                        x <= tetromino_x + 1;
+                                        y <= tetromino_y + 1;
+                                    end
+                                    3'd2: begin
+                                        x <= tetromino_x + 1;
+                                        y <= tetromino_y + 2;
+                                    end
+                                    3'd3: begin
+                                        x <= tetromino_x + 1;
+                                        y <= tetromino_y + 3;
+                                    end
+                                endcase
                             end
                         endcase
                     end
                     O: begin
+                        // Doesn't change according to the spin state
                         case (draw_tetromino_count)
                             3'd0: begin
                                 x <= tetromino_x + 1;
@@ -381,102 +401,342 @@ always @(posedge CLOCK_50 or negedge RST) begin
                         endcase
                    end
                     L: begin
-                        case (draw_tetromino_count)
-                            3'd0: begin
-                                x <= tetromino_x + 1;
-                                y <= tetromino_y;
+                        case (spin_state)
+                            ORIG: begin
+                                case (draw_tetromino_count)
+                                    3'd0: begin
+                                        x <= tetromino_x + 1;
+                                        y <= tetromino_y;
+                                    end
+                                    3'd1: begin
+                                        x <= tetromino_x + 1;
+                                        y <= tetromino_y + 1;
+                                    end
+                                    3'd2: begin
+                                        x <= tetromino_x + 1;
+                                        y <= tetromino_y + 2;
+                                    end
+                                    3'd3: begin
+                                        x <= tetromino_x + 2;
+                                        y <= tetromino_y + 2;
+                                    end
+                                endcase
                             end
-                            3'd1: begin
-                                x <= tetromino_x + 1;
-                                y <= tetromino_y + 1;
+                            L_1: begin
+                                case (draw_tetromino_count)
+                                    3'd0: begin
+                                        x <= tetromino_x;
+                                        y <= tetromino_y + 1;
+                                    end
+                                    3'd1: begin
+                                        x <= tetromino_x + 1;
+                                        y <= tetromino_y + 1;
+                                    end
+                                    3'd2: begin
+                                        x <= tetromino_x + 2;
+                                        y <= tetromino_y + 1;
+                                    end
+                                    3'd3: begin
+                                        x <= tetromino_x + 2;
+                                        y <= tetromino_y;
+                                    end
+                                endcase
                             end
-                            3'd2: begin
-                                x <= tetromino_x + 1;
-                                y <= tetromino_y + 2;
+                            L_2: begin
+                                case (draw_tetromino_count)
+                                    3'd0: begin
+                                        x <= tetromino_x;
+                                        y <= tetromino_y;
+                                    end
+                                    3'd1: begin
+                                        x <= tetromino_x + 1;
+                                        y <= tetromino_y;
+                                    end
+                                    3'd2: begin
+                                        x <= tetromino_x + 1;
+                                        y <= tetromino_y + 1;
+                                    end
+                                    3'd3: begin
+                                        x <= tetromino_x + 1;
+                                        y <= tetromino_y + 2;
+                                    end
+                                endcase
                             end
-                            3'd3: begin
-                                x <= tetromino_x + 2;
-                                y <= tetromino_y + 2;
+                            L_3: begin
+                                case (draw_tetromino_count)
+                                    3'd0: begin
+                                        x <= tetromino_x;
+                                        y <= tetromino_y + 1;
+                                    end
+                                    3'd1: begin
+                                        x <= tetromino_x;
+                                        y <= tetromino_y + 2;
+                                    end
+                                    3'd2: begin
+                                        x <= tetromino_x + 1;
+                                        y <= tetromino_y + 1;
+                                    end
+                                    3'd3: begin
+                                        x <= tetromino_x + 2;
+                                        y <= tetromino_y + 1;
+                                    end
+                                endcase
                             end
                         endcase
                     end
                     J: begin
-                        case (draw_tetromino_count)
-                            3'd0: begin
-                                x <= tetromino_x + 1;
-                                y <= tetromino_y;
+                        case (spin_state)
+                            ORIG: begin
+                                case (draw_tetromino_count)
+                                    3'd0: begin
+                                        x <= tetromino_x + 1;
+                                        y <= tetromino_y;
+                                    end
+                                    3'd1: begin
+                                        x <= tetromino_x + 1;
+                                        y <= tetromino_y + 1;
+                                    end
+                                    3'd2: begin
+                                        x <= tetromino_x;
+                                        y <= tetromino_y + 2;
+                                    end
+                                    3'd3: begin
+                                        x <= tetromino_x + 1;
+                                        y <= tetromino_y + 2;
+                                    end
+                                endcase
                             end
-                            3'd1: begin
-                                x <= tetromino_x + 1;
-                                y <= tetromino_y + 1;
+                            L_1: begin
+                                case (draw_tetromino_count)
+                                    3'd0: begin
+                                        x <= tetromino_x;
+                                        y <= tetromino_y + 1;
+                                    end
+                                    3'd1: begin
+                                        x <= tetromino_x + 1;
+                                        y <= tetromino_y + 1;
+                                    end
+                                    3'd2: begin
+                                        x <= tetromino_x + 2;
+                                        y <= tetromino_y + 1;
+                                    end
+                                    3'd3: begin
+                                        x <= tetromino_x + 2;
+                                        y <= tetromino_y + 2;
+                                    end
+                                endcase
                             end
-                            3'd2: begin
-                                x <= tetromino_x;
-                                y <= tetromino_y + 2;
+                            L_2: begin
+                                case (draw_tetromino_count)
+                                    3'd0: begin
+                                        x <= tetromino_x + 1;
+                                        y <= tetromino_y;
+                                    end
+                                    3'd1: begin
+                                        x <= tetromino_x + 2;
+                                        y <= tetromino_y;
+                                    end
+                                    3'd2: begin
+                                        x <= tetromino_x + 1;
+                                        y <= tetromino_y + 1;
+                                    end
+                                    3'd3: begin
+                                        x <= tetromino_x + 1;
+                                        y <= tetromino_y + 2;
+                                    end
+                                endcase
                             end
-                            3'd3: begin
-                                x <= tetromino_x + 1;
-                                y <= tetromino_y + 2;
+                            L_3: begin
+                                case (draw_tetromino_count)
+                                    3'd0: begin
+                                        x <= tetromino_x;
+                                        y <= tetromino_y;
+                                    end
+                                    3'd1: begin
+                                        x <= tetromino_x;
+                                        y <= tetromino_y + 1;
+                                    end
+                                    3'd2: begin
+                                        x <= tetromino_x + 1;
+                                        y <= tetromino_y + 1;
+                                    end
+                                    3'd3: begin
+                                        x <= tetromino_x + 2;
+                                        y <= tetromino_y + 1;
+                                    end
+                                endcase
                             end
                         endcase
                     end
                     S: begin
-                        case (draw_tetromino_count)
-                            3'd0: begin
-                                x <= tetromino_x;
-                                y <= tetromino_y + 2;
+                        case (spin_state % 2)
+                            ORIG: begin
+                                case (draw_tetromino_count)
+                                    3'd0: begin
+                                        x <= tetromino_x;
+                                        y <= tetromino_y + 2;
+                                    end
+                                    3'd1: begin
+                                        x <= tetromino_x + 1;
+                                        y <= tetromino_y + 2;
+                                    end
+                                    3'd2: begin
+                                        x <= tetromino_x + 1;
+                                        y <= tetromino_y + 1;
+                                    end
+                                    3'd3: begin
+                                        x <= tetromino_x + 2;
+                                        y <= tetromino_y + 1;
+                                    end
+                                endcase
                             end
-                            3'd1: begin
-                                x <= tetromino_x + 1;
-                                y <= tetromino_y + 2;
-                            end
-                            3'd2: begin
-                                x <= tetromino_x + 1;
-                                y <= tetromino_y + 1;
-                            end
-                            3'd3: begin
-                                x <= tetromino_x + 2;
-                                y <= tetromino_y + 1;
+                            L_1: begin
+                                case (draw_tetromino_count)
+                                    3'd0: begin
+                                        x <= tetromino_x + 1;
+                                        y <= tetromino_y;
+                                    end
+                                    3'd1: begin
+                                        x <= tetromino_x + 1;
+                                        y <= tetromino_y + 1;
+                                    end
+                                    3'd2: begin
+                                        x <= tetromino_x + 2;
+                                        y <= tetromino_y + 1;
+                                    end
+                                    3'd3: begin
+                                        x <= tetromino_x + 2;
+                                        y <= tetromino_y + 2;
+                                    end
+                                endcase
                             end
                         endcase
                     end
                     Z: begin
-                        case (draw_tetromino_count)
-                            3'd0: begin
-                                x <= tetromino_x;
-                                y <= tetromino_y + 1;
+                        case (spin_state % 2)
+                            ORIG: begin
+                                case (draw_tetromino_count)
+                                    3'd0: begin
+                                        x <= tetromino_x;
+                                        y <= tetromino_y + 1;
+                                    end
+                                    3'd1: begin
+                                        x <= tetromino_x + 1;
+                                        y <= tetromino_y + 1;
+                                    end
+                                    3'd2: begin
+                                        x <= tetromino_x + 1;
+                                        y <= tetromino_y + 2;
+                                    end
+                                    3'd3: begin
+                                        x <= tetromino_x + 2;
+                                        y <= tetromino_y + 2;
+                                    end
+                                endcase
                             end
-                            3'd1: begin
-                                x <= tetromino_x + 1;
-                                y <= tetromino_y + 1;
-                            end
-                            3'd2: begin
-                                x <= tetromino_x + 1;
-                                y <= tetromino_y + 2;
-                            end
-                            3'd3: begin
-                                x <= tetromino_x + 2;
-                                y <= tetromino_y + 2;
+                            L_1: begin
+                                case (draw_tetromino_count)
+                                    3'd0: begin
+                                        x <= tetromino_x;
+                                        y <= tetromino_y + 1;
+                                    end
+                                    3'd1: begin
+                                        x <= tetromino_x;
+                                        y <= tetromino_y + 2;
+                                    end
+                                    3'd2: begin
+                                        x <= tetromino_x + 1;
+                                        y <= tetromino_y + 1;
+                                    end
+                                    3'd3: begin
+                                        x <= tetromino_x + 1;
+                                        y <= tetromino_y;
+                                    end
+                                endcase
                             end
                         endcase
                     end
                     T: begin
-                        case (draw_tetromino_count)
-                            3'd0: begin
-                                x <= tetromino_x;
-                                y <= tetromino_y + 1;
+                        case (spin_state)
+                            ORIG: begin
+                                case (draw_tetromino_count)
+                                    3'd0: begin
+                                        x <= tetromino_x;
+                                        y <= tetromino_y + 1;
+                                    end
+                                    3'd1: begin
+                                        x <= tetromino_x + 1;
+                                        y <= tetromino_y;
+                                    end
+                                    3'd2: begin
+                                        x <= tetromino_x + 1;
+                                        y <= tetromino_y + 1;
+                                    end
+                                    3'd3: begin
+                                        x <= tetromino_x + 2;
+                                        y <= tetromino_y + 1;
+                                    end
+                                endcase
                             end
-                            3'd1: begin
-                                x <= tetromino_x + 1;
-                                y <= tetromino_y;
+                            L_1: begin
+                                case (draw_tetromino_count)
+                                    3'd0: begin
+                                        x <= tetromino_x;
+                                        y <= tetromino_y + 1;
+                                    end
+                                    3'd1: begin
+                                        x <= tetromino_x + 1;
+                                        y <= tetromino_y;
+                                    end
+                                    3'd2: begin
+                                        x <= tetromino_x + 1;
+                                        y <= tetromino_y + 1;
+                                    end
+                                    3'd3: begin
+                                        x <= tetromino_x + 1;
+                                        y <= tetromino_y + 2;
+                                    end
+                                endcase
                             end
-                            3'd2: begin
-                                x <= tetromino_x + 1;
-                                y <= tetromino_y + 1;
+                            L_2: begin
+                                case (draw_tetromino_count)
+                                    3'd0: begin
+                                        x <= tetromino_x;
+                                        y <= tetromino_y + 1;
+                                    end
+                                    3'd1: begin
+                                        x <= tetromino_x + 1;
+                                        y <= tetromino_y + 1;
+                                    end
+                                    3'd2: begin
+                                        x <= tetromino_x + 2;
+                                        y <= tetromino_y + 1;
+                                    end
+                                    3'd3: begin
+                                        x <= tetromino_x + 1;
+                                        y <= tetromino_y + 2;
+                                    end
+                                endcase
                             end
-                            3'd3: begin
-                                x <= tetromino_x + 2;
-                                y <= tetromino_y + 1;
+                            L_3: begin
+                                case (draw_tetromino_count)
+                                    3'd0: begin
+                                        x <= tetromino_x + 1;
+                                        y <= tetromino_y;
+                                    end
+                                    3'd1: begin
+                                        x <= tetromino_x + 1;
+                                        y <= tetromino_y + 1;
+                                    end
+                                    3'd2: begin
+                                        x <= tetromino_x + 1;
+                                        y <= tetromino_y + 2;
+                                    end
+                                    3'd3: begin
+                                        x <= tetromino_x + 2;
+                                        y <= tetromino_y + 1;
+                                    end
+                                endcase
                             end
                         endcase
                     end
@@ -496,6 +756,7 @@ always @(posedge CLOCK_50 or negedge RST) begin
                 STATE <= CHECK_IF_MOVABLE;
             end
             else if (spin_left_key == 1'b1) begin
+dbg <= 1'b1;
                 requestMovableCheck <= SPIN_L;
                 check_movable_count <= 3'd0;
                 STATE <= CHECK_IF_MOVABLE;
@@ -526,13 +787,17 @@ always @(posedge CLOCK_50 or negedge RST) begin
             //      Specify address => read_x, read_y
 
             we <= 1'b1;
-            if (check_movable_count == 3'd4) begin
+            if (isMovable == 1'b0 || check_movable_count == 3'd4) begin
+                // Reset counter
                 check_movable_count <= 3'd0;
                 isReadColor <= 1'b0;
                 if (isMovable == 1'b0) begin
+                    // Reset isMovable to 1 (movable)
+                    isMovable <= 1'b1;
                     // If it couldn't move downward anymore
                     if (requestMovableCheck == DOWN) begin
                         STATE <= CHECK_COMPLETE_ROW;
+                        // TODO: Shouldn't this be -1?
                         read_x <= 6'd0;
                         read_y <= 6'd22;
                     end
@@ -554,60 +819,136 @@ always @(posedge CLOCK_50 or negedge RST) begin
                 STATE <= CHECK_BUFFER;
                 case (current_tetromino)
                     I: begin
-                        case (requestMovableCheck)
-                            DOWN: begin
-                                case (check_movable_count)
-                                    3'd0: begin
-                                        read_x <= tetromino_x;
-                                        read_y <= tetromino_y + 2;
+                        case (spin_state % 2)
+                            ORIG: begin
+                                case (requestMovableCheck)
+                                    DOWN: begin
+                                        case (check_movable_count)
+                                            3'd0: begin
+                                                read_x <= tetromino_x;
+                                                read_y <= tetromino_y + 2;
+                                            end
+                                            3'd1: begin
+                                                read_x <= tetromino_x + 1;
+                                                read_y <= tetromino_y + 2;
+                                            end
+                                            3'd2: begin
+                                                read_x <= tetromino_x + 2;
+                                                read_y <= tetromino_y + 2;
+                                            end
+                                            3'd3: begin
+                                                read_x <= tetromino_x + 3;
+                                                read_y <= tetromino_y + 2;
+                                            end
+                                        endcase
                                     end
-                                    3'd1: begin
-                                        read_x <= tetromino_x + 1;
-                                        read_y <= tetromino_y + 2;
+                                    LEFT: begin
+                                        case (check_movable_count)
+                                            3'd0: begin
+                                                read_x <= tetromino_x - 1;
+                                                read_y <= tetromino_y + 1;
+                                            end
+                                        endcase
                                     end
-                                    3'd2: begin
-                                        read_x <= tetromino_x + 2;
-                                        read_y <= tetromino_y + 2;
+                                    RIGHT: begin
+                                        case (check_movable_count)
+                                            3'd0: begin
+                                                read_x <= tetromino_x + 4;
+                                                read_y <= tetromino_y + 1;
+                                            end
+                                        endcase
                                     end
-                                    3'd3: begin
-                                        read_x <= tetromino_x + 3;
-                                        read_y <= tetromino_y + 2;
+                                    SPIN_L: begin
+                                        case (check_movable_count)
+                                            3'd0: begin
+                                                read_x <= tetromino_x + 1;
+                                                read_y <= tetromino_y;
+                                            end
+                                            3'd1: begin
+                                                read_x <= tetromino_x + 1;
+                                                read_y <= tetromino_y + 2;
+                                            end
+                                            3'd2: begin
+                                                read_x <= tetromino_x + 1;
+                                                read_y <= tetromino_y + 3;
+                                            end
+                                            3'd3: begin
+                                                read_x <= tetromino_x + 1;
+                                                read_y <= tetromino_y + 1;
+                                            end
+                                        endcase
                                     end
                                 endcase
                             end
-                            LEFT: begin
-                                case (check_movable_count)
-                                    3'd0: begin
-                                        read_x <= tetromino_x - 1;
-                                        read_y <= tetromino_y + 1;
+                            L_1: begin
+                                case (requestMovableCheck)
+                                    DOWN: begin
+                                        case (check_movable_count)
+                                            3'd0: begin
+                                                read_x <= tetromino_x + 1;
+                                                read_y <= tetromino_y + 4;
+                                            end
+                                        endcase
                                     end
-                                endcase
-                            end
-                            RIGHT: begin
-                                case (check_movable_count)
-                                    3'd0: begin
-                                        read_x <= tetromino_x + 4;
-                                        read_y <= tetromino_y + 1;
+                                    LEFT: begin
+                                        case (check_movable_count)
+                                            3'd0: begin
+                                                read_x <= tetromino_x;
+                                                read_y <= tetromino_y;
+                                            end
+                                            3'd1: begin
+                                                read_x <= tetromino_x;
+                                                read_y <= tetromino_y + 1;
+                                            end
+                                            3'd2: begin
+                                                read_x <= tetromino_x;
+                                                read_y <= tetromino_y + 2;
+                                            end
+                                            3'd3: begin
+                                                read_x <= tetromino_x;
+                                                read_y <= tetromino_y + 3;
+                                            end
+                                        endcase
                                     end
-                                endcase
-                            end
-                            SPIN_L: begin
-                                case (check_movable_count)
-                                    3'd0: begin
-                                        read_x <= tetromino_x + 1;
-                                        read_y <= tetromino_y;
+                                    RIGHT: begin
+                                        case (check_movable_count)
+                                            3'd0: begin
+                                                read_x <= tetromino_x + 2;
+                                                read_y <= tetromino_y;
+                                            end
+                                            3'd1: begin
+                                                read_x <= tetromino_x + 2;
+                                                read_y <= tetromino_y + 1;
+                                            end
+                                            3'd2: begin
+                                                read_x <= tetromino_x + 2;
+                                                read_y <= tetromino_y + 2;
+                                            end
+                                            3'd3: begin
+                                                read_x <= tetromino_x + 2;
+                                                read_y <= tetromino_y + 3;
+                                            end
+                                        endcase
                                     end
-                                    3'd1: begin
-                                        read_x <= tetromino_x + 1;
-                                        read_y <= tetromino_y + 2;
-                                    end
-                                    3'd2: begin
-                                        read_x <= tetromino_x + 1;
-                                        read_y <= tetromino_y + 3;
-                                    end
-                                    3'd3: begin
-                                        read_x <= tetromino_x + 1;
-                                        read_y <= tetromino_y + 1;
+                                    SPIN_L: begin
+                                        case (check_movable_count)
+                                            3'd0: begin
+                                                read_x <= tetromino_x;
+                                                read_y <= tetromino_y + 1;
+                                            end
+                                            3'd1: begin
+                                                read_x <= tetromino_x + 1;
+                                                read_y <= tetromino_y + 1;
+                                            end
+                                            3'd2: begin
+                                                read_x <= tetromino_x + 2;
+                                                read_y <= tetromino_y + 1;
+                                            end
+                                            3'd3: begin
+                                                read_x <= tetromino_x + 3;
+                                                read_y <= tetromino_y + 1;
+                                            end
+                                        endcase
                                     end
                                 endcase
                             end
@@ -657,328 +998,1076 @@ always @(posedge CLOCK_50 or negedge RST) begin
                         endcase
                     end // End of O
                     L: begin
-                        case (requestMovableCheck)
-                            DOWN: begin
-                                case (check_movable_count)
-                                    3'd0: begin
-                                        read_x <= tetromino_x + 1;
-                                        read_y <= tetromino_y + 3;
+                        case (spin_state)
+                            ORIG: begin
+                                case (requestMovableCheck)
+                                    DOWN: begin
+                                        case (check_movable_count)
+                                            3'd0: begin
+                                                read_x <= tetromino_x + 1;
+                                                read_y <= tetromino_y + 3;
+                                            end
+                                            3'd1: begin
+                                                read_x <= tetromino_x + 2;
+                                                read_y <= tetromino_y + 3;
+                                            end
+                                        endcase
                                     end
-                                    3'd1: begin
-                                        read_x <= tetromino_x + 2;
-                                        read_y <= tetromino_y + 3;
+                                    LEFT: begin
+                                        case (check_movable_count)
+                                            3'd0: begin
+                                                read_x <= tetromino_x;
+                                                read_y <= tetromino_y;
+                                            end
+                                            3'd1: begin
+                                                read_x <= tetromino_x;
+                                                read_y <= tetromino_y + 1;
+                                            end
+                                            3'd2: begin
+                                                read_x <= tetromino_x;
+                                                read_y <= tetromino_y + 2;
+                                            end
+                                        endcase
+                                    end
+                                    RIGHT: begin
+                                        case (check_movable_count)
+                                            3'd0: begin
+                                                read_x <= tetromino_x + 2;
+                                                read_y <= tetromino_y;
+                                            end
+                                            3'd1: begin
+                                                read_x <= tetromino_x + 2;
+                                                read_y <= tetromino_y + 1;
+                                            end
+                                            3'd2: begin
+                                                read_x <= tetromino_x + 3;
+                                                read_y <= tetromino_y + 2;
+                                            end
+                                        endcase
+                                    end
+                                    SPIN_L: begin
+                                        case (check_movable_count)
+                                            3'd0: begin
+                                                read_x <= tetromino_x;
+                                                read_y <= tetromino_y + 1;
+                                            end
+                                            3'd1: begin
+                                                read_x <= tetromino_x + 1;
+                                                read_y <= tetromino_y + 1;
+                                            end
+                                            3'd2: begin
+                                                read_x <= tetromino_x + 2;
+                                                read_y <= tetromino_y + 1;
+                                            end
+                                            3'd3: begin
+                                                read_x <= tetromino_x + 2;
+                                                read_y <= tetromino_y;
+                                            end
+                                        endcase
                                     end
                                 endcase
                             end
-                            LEFT: begin
-                                case (check_movable_count)
-                                    3'd0: begin
-                                        read_x <= tetromino_x;
-                                        read_y <= tetromino_y;
+                            L_1: begin
+                                case (requestMovableCheck)
+                                    DOWN: begin
+                                        case (check_movable_count)
+                                            3'd0: begin
+                                                read_x <= tetromino_x;
+                                                read_y <= tetromino_y + 2;
+                                            end
+                                            3'd1: begin
+                                                read_x <= tetromino_x + 1;
+                                                read_y <= tetromino_y + 2;
+                                            end
+                                            3'd2: begin
+                                                read_x <= tetromino_x + 2;
+                                                read_y <= tetromino_y + 2;
+                                            end
+                                        endcase
                                     end
-                                    3'd1: begin
-                                        read_x <= tetromino_x;
-                                        read_y <= tetromino_y + 1;
+                                    LEFT: begin
+                                        case (check_movable_count)
+                                            3'd0: begin
+                                                read_x <= tetromino_x + 1;
+                                                read_y <= tetromino_y;
+                                            end
+                                            3'd1: begin
+                                                read_x <= tetromino_x - 1;
+                                                read_y <= tetromino_y + 1;
+                                            end
+                                        endcase
                                     end
-                                    3'd2: begin
-                                        read_x <= tetromino_x;
-                                        read_y <= tetromino_y + 2;
+                                    RIGHT: begin
+                                        case (check_movable_count)
+                                            3'd0: begin
+                                                read_x <= tetromino_x + 3;
+                                                read_y <= tetromino_y;
+                                            end
+                                            3'd1: begin
+                                                read_x <= tetromino_x + 3;
+                                                read_y <= tetromino_y + 1;
+                                            end
+                                        endcase
+                                    end
+                                    SPIN_L: begin
+                                        case (check_movable_count)
+                                            3'd0: begin
+                                                read_x <= tetromino_x;
+                                                read_y <= tetromino_y;
+                                            end
+                                            3'd1: begin
+                                                read_x <= tetromino_x + 1;
+                                                read_y <= tetromino_y;
+                                            end
+                                            3'd2: begin
+                                                read_x <= tetromino_x + 1;
+                                                read_y <= tetromino_y + 1;
+                                            end
+                                            3'd3: begin
+                                                read_x <= tetromino_x + 1;
+                                                read_y <= tetromino_y + 2;
+                                            end
+                                        endcase
                                     end
                                 endcase
                             end
-                            RIGHT: begin
-                                case (check_movable_count)
-                                    3'd0: begin
-                                        read_x <= tetromino_x + 2;
-                                        read_y <= tetromino_y;
+                            L_2: begin
+                                case (requestMovableCheck)
+                                    DOWN: begin
+                                        case (check_movable_count)
+                                            3'd0: begin
+                                                read_x <= tetromino_x;
+                                                read_y <= tetromino_y + 1;
+                                            end
+                                            3'd1: begin
+                                                read_x <= tetromino_x + 1;
+                                                read_y <= tetromino_y + 3;
+                                            end
+                                        endcase
                                     end
-                                    3'd1: begin
-                                        read_x <= tetromino_x + 2;
-                                        read_y <= tetromino_y + 1;
+                                    LEFT: begin
+                                        case (check_movable_count)
+                                            3'd0: begin
+                                                read_x <= tetromino_x - 1;
+                                                read_y <= tetromino_y;
+                                            end
+                                            3'd1: begin
+                                                read_x <= tetromino_x;
+                                                read_y <= tetromino_y + 1;
+                                            end
+                                            3'd2: begin
+                                                read_x <= tetromino_x;
+                                                read_y <= tetromino_y + 2;
+                                            end
+                                        endcase
                                     end
-                                    3'd2: begin
-                                        read_x <= tetromino_x + 3;
-                                        read_y <= tetromino_y + 2;
+                                    RIGHT: begin
+                                        case (check_movable_count)
+                                            3'd0: begin
+                                                read_x <= tetromino_x + 2;
+                                                read_y <= tetromino_y;
+                                            end
+                                            3'd1: begin
+                                                read_x <= tetromino_x + 2;
+                                                read_y <= tetromino_y + 1;
+                                            end
+                                            3'd2: begin
+                                                read_x <= tetromino_x + 2;
+                                                read_y <= tetromino_y + 2;
+                                            end
+                                        endcase
+                                    end
+                                    SPIN_L: begin
+                                        case (check_movable_count)
+                                            3'd0: begin
+                                                read_x <= tetromino_x;
+                                                read_y <= tetromino_y + 1;
+                                            end
+                                            3'd1: begin
+                                                read_x <= tetromino_x;
+                                                read_y <= tetromino_y + 2;
+                                            end
+                                            3'd2: begin
+                                                read_x <= tetromino_x + 1;
+                                                read_y <= tetromino_y + 1;
+                                            end
+                                            3'd3: begin
+                                                read_x <= tetromino_x + 2;
+                                                read_y <= tetromino_y + 1;
+                                            end
+                                        endcase
                                     end
                                 endcase
                             end
-                            SPIN_L: begin
-                                case (check_movable_count)
-                                    3'd0: begin
-                                        read_x <= tetromino_x;
-                                        read_y <= tetromino_y + 1;
+                            L_3: begin
+                                case (requestMovableCheck)
+                                    DOWN: begin
+                                        case (check_movable_count)
+                                            3'd0: begin
+                                                read_x <= tetromino_x;
+                                                read_y <= tetromino_y + 3;
+                                            end
+                                            3'd1: begin
+                                                read_x <= tetromino_x + 1;
+                                                read_y <= tetromino_y + 2;
+                                            end
+                                            3'd2: begin
+                                                read_x <= tetromino_x + 2;
+                                                read_y <= tetromino_y + 2;
+                                            end
+                                        endcase
                                     end
-                                    3'd1: begin
-                                        read_x <= tetromino_x + 1;
-                                        read_y <= tetromino_y + 1;
+                                    LEFT: begin
+                                        case (check_movable_count)
+                                            3'd0: begin
+                                                read_x <= tetromino_x - 1;
+                                                read_y <= tetromino_y + 1;
+                                            end
+                                            3'd1: begin
+                                                read_x <= tetromino_x - 1;
+                                                read_y <= tetromino_y + 2;
+                                            end
+                                        endcase
                                     end
-                                    3'd2: begin
-                                        read_x <= tetromino_x + 2;
-                                        read_y <= tetromino_y + 1;
+                                    RIGHT: begin
+                                        case (check_movable_count)
+                                            3'd0: begin
+                                                read_x <= tetromino_x + 1;
+                                                read_y <= tetromino_y + 2;
+                                            end
+                                            3'd1: begin
+                                                read_x <= tetromino_x + 3;
+                                                read_y <= tetromino_y + 1;
+                                            end
+                                        endcase
                                     end
-                                    3'd3: begin
-                                        read_x <= tetromino_x + 2;
-                                        read_y <= tetromino_y;
+                                    SPIN_L: begin
+                                        case (check_movable_count)
+                                            3'd0: begin
+                                                read_x <= tetromino_x;
+                                                read_y <= tetromino_y;
+                                            end
+                                            3'd1: begin
+                                                read_x <= tetromino_x;
+                                                read_y <= tetromino_y + 1;
+                                            end
+                                            3'd2: begin
+                                                read_x <= tetromino_x;
+                                                read_y <= tetromino_y + 2;
+                                            end
+                                            3'd3: begin
+                                                read_x <= tetromino_x + 1;
+                                                read_y <= tetromino_y + 2;
+                                            end
+                                        endcase
                                     end
                                 endcase
                             end
                         endcase
                     end // End of L
                     J: begin
-                        case (requestMovableCheck)
-                            DOWN: begin
-                                case (check_movable_count)
-                                    3'd0: begin
-                                        read_x <= tetromino_x;
-                                        read_y <= tetromino_y + 3;
+                        case (spin_state)
+                            ORIG: begin
+                                case (requestMovableCheck)
+                                    DOWN: begin
+                                        case (check_movable_count)
+                                            3'd0: begin
+                                                read_x <= tetromino_x;
+                                                read_y <= tetromino_y + 3;
+                                            end
+                                            3'd1: begin
+                                                read_x <= tetromino_x + 1;
+                                                read_y <= tetromino_y + 3;
+                                            end
+                                        endcase
                                     end
-                                    3'd1: begin
-                                        read_x <= tetromino_x + 1;
-                                        read_y <= tetromino_y + 3;
+                                    LEFT: begin
+                                        case (check_movable_count)
+                                            3'd0: begin
+                                                read_x <= tetromino_x;
+                                                read_y <= tetromino_y;
+                                            end
+                                            3'd1: begin
+                                                read_x <= tetromino_x;
+                                                read_y <= tetromino_y + 1;
+                                            end
+                                            3'd2: begin
+                                                read_x <= tetromino_x - 1;
+                                                read_y <= tetromino_y + 2;
+                                            end
+                                        endcase
+                                    end
+                                    RIGHT: begin
+                                        case (check_movable_count)
+                                            3'd0: begin
+                                                read_x <= tetromino_x + 2;
+                                                read_y <= tetromino_y;
+                                            end
+                                            3'd1: begin
+                                                read_x <= tetromino_x + 2;
+                                                read_y <= tetromino_y + 1;
+                                            end
+                                            3'd2: begin
+                                                read_x <= tetromino_x + 2;
+                                                read_y <= tetromino_y + 2;
+                                            end
+                                        endcase
+                                    end
+                                    SPIN_L: begin
+                                        case (check_movable_count)
+                                            3'd0: begin
+                                                read_x <= tetromino_x;
+                                                read_y <= tetromino_y + 1;
+                                            end
+                                            3'd1: begin
+                                                read_x <= tetromino_x + 1;
+                                                read_y <= tetromino_y + 1;
+                                            end
+                                            3'd2: begin
+                                                read_x <= tetromino_x + 2;
+                                                read_y <= tetromino_y + 1;
+                                            end
+                                            3'd3: begin
+                                                read_x <= tetromino_x + 2;
+                                                read_y <= tetromino_y + 2;
+                                            end
+                                        endcase
                                     end
                                 endcase
                             end
-                            LEFT: begin
-                                case (check_movable_count)
-                                    3'd0: begin
-                                        read_x <= tetromino_x;
-                                        read_y <= tetromino_y;
+                            L_1: begin
+                                case (requestMovableCheck)
+                                    DOWN: begin
+                                        case (check_movable_count)
+                                            3'd0: begin
+                                                read_x <= tetromino_x;
+                                                read_y <= tetromino_y + 2;
+                                            end
+                                            3'd1: begin
+                                                read_x <= tetromino_x + 1;
+                                                read_y <= tetromino_y + 2;
+                                            end
+                                            3'd2: begin
+                                                read_x <= tetromino_x + 2;
+                                                read_y <= tetromino_y + 3;
+                                            end
+                                        endcase
                                     end
-                                    3'd1: begin
-                                        read_x <= tetromino_x;
-                                        read_y <= tetromino_y + 1;
+                                    LEFT: begin
+                                        case (check_movable_count)
+                                            3'd0: begin
+                                                read_x <= tetromino_x - 1;
+                                                read_y <= tetromino_y;
+                                            end
+                                            3'd1: begin
+                                                read_x <= tetromino_x + 1;
+                                                read_y <= tetromino_y + 2;
+                                            end
+                                        endcase
                                     end
-                                    3'd2: begin
-                                        read_x <= tetromino_x - 1;
-                                        read_y <= tetromino_y + 2;
+                                    RIGHT: begin
+                                        case (check_movable_count)
+                                            3'd0: begin
+                                                read_x <= tetromino_x + 3;
+                                                read_y <= tetromino_y + 1;
+                                            end
+                                            3'd1: begin
+                                                read_x <= tetromino_x + 3;
+                                                read_y <= tetromino_y + 2;
+                                            end
+                                        endcase
+                                    end
+                                    SPIN_L: begin
+                                        case (check_movable_count)
+                                            3'd0: begin
+                                                read_x <= tetromino_x + 1;
+                                                read_y <= tetromino_y;
+                                            end
+                                            3'd1: begin
+                                                read_x <= tetromino_x + 2;
+                                                read_y <= tetromino_y;
+                                            end
+                                            3'd2: begin
+                                                read_x <= tetromino_x + 1;
+                                                read_y <= tetromino_y + 1;
+                                            end
+                                            3'd3: begin
+                                                read_x <= tetromino_x + 1;
+                                                read_y <= tetromino_y + 2;
+                                            end
+                                        endcase
                                     end
                                 endcase
                             end
-                            RIGHT: begin
-                                case (check_movable_count)
-                                    3'd0: begin
-                                        read_x <= tetromino_x + 2;
-                                        read_y <= tetromino_y;
+                            L_2: begin
+                                case (requestMovableCheck)
+                                    DOWN: begin
+                                        case (check_movable_count)
+                                            3'd0: begin
+                                                read_x <= tetromino_x + 1;
+                                                read_y <= tetromino_y + 3;
+                                            end
+                                            3'd1: begin
+                                                read_x <= tetromino_x + 2;
+                                                read_y <= tetromino_y + 1;
+                                            end
+                                        endcase
                                     end
-                                    3'd1: begin
-                                        read_x <= tetromino_x + 2;
-                                        read_y <= tetromino_y + 1;
+                                    LEFT: begin
+                                        case (check_movable_count)
+                                            3'd0: begin
+                                                read_x <= tetromino_x;
+                                                read_y <= tetromino_y;
+                                            end
+                                            3'd1: begin
+                                                read_x <= tetromino_x;
+                                                read_y <= tetromino_y + 1;
+                                            end
+                                            3'd2: begin
+                                                read_x <= tetromino_x;
+                                                read_y <= tetromino_y + 2;
+                                            end
+                                        endcase
                                     end
-                                    3'd2: begin
-                                        read_x <= tetromino_x + 2;
-                                        read_y <= tetromino_y + 2;
+                                    RIGHT: begin
+                                        case (check_movable_count)
+                                            3'd0: begin
+                                                read_x <= tetromino_x + 3;
+                                                read_y <= tetromino_y;
+                                            end
+                                            3'd1: begin
+                                                read_x <= tetromino_x + 2;
+                                                read_y <= tetromino_y + 1;
+                                            end
+                                            3'd2: begin
+                                                read_x <= tetromino_x + 2;
+                                                read_y <= tetromino_y + 2;
+                                            end
+                                        endcase
+                                    end
+                                    SPIN_L: begin
+                                        case (check_movable_count)
+                                            3'd0: begin
+                                                read_x <= tetromino_x;
+                                                read_y <= tetromino_y;
+                                            end
+                                            3'd1: begin
+                                                read_x <= tetromino_x;
+                                                read_y <= tetromino_y + 1;
+                                            end
+                                            3'd2: begin
+                                                read_x <= tetromino_x + 1;
+                                                read_y <= tetromino_y + 1;
+                                            end
+                                            3'd3: begin
+                                                read_x <= tetromino_x + 2;
+                                                read_y <= tetromino_y + 1;
+                                            end
+                                        endcase
                                     end
                                 endcase
                             end
-                            SPIN_L: begin
-                                case (check_movable_count)
-                                    3'd0: begin
-                                        read_x <= tetromino_x;
-                                        read_y <= tetromino_y + 1;
+                            L_3: begin
+                                case (requestMovableCheck)
+                                    DOWN: begin
+                                        case (check_movable_count)
+                                            3'd0: begin
+                                                read_x <= tetromino_x;
+                                                read_y <= tetromino_y + 2;
+                                            end
+                                            3'd1: begin
+                                                read_x <= tetromino_x + 1;
+                                                read_y <= tetromino_y + 2;
+                                            end
+                                            3'd2: begin
+                                                read_x <= tetromino_x + 2;
+                                                read_y <= tetromino_y + 2;
+                                            end
+                                        endcase
                                     end
-                                    3'd1: begin
-                                        read_x <= tetromino_x + 1;
-                                        read_y <= tetromino_y + 1;
+                                    LEFT: begin
+                                        case (check_movable_count)
+                                            3'd0: begin
+                                                read_x <= tetromino_x - 1;
+                                                read_y <= tetromino_y;
+                                            end
+                                            3'd1: begin
+                                                read_x <= tetromino_x - 1;
+                                                read_y <= tetromino_y + 1;
+                                            end
+                                        endcase
                                     end
-                                    3'd2: begin
-                                        read_x <= tetromino_x + 2;
-                                        read_y <= tetromino_y + 1;
+                                    RIGHT: begin
+                                        case (check_movable_count)
+                                            3'd0: begin
+                                                read_x <= tetromino_x + 1;
+                                                read_y <= tetromino_y;
+                                            end
+                                            3'd1: begin
+                                                read_x <= tetromino_x + 3;
+                                                read_y <= tetromino_y + 1;
+                                            end
+                                        endcase
                                     end
-                                    3'd3: begin
-                                        read_x <= tetromino_x + 2;
-                                        read_y <= tetromino_y + 2;
+                                    SPIN_L: begin
+                                        case (check_movable_count)
+                                            3'd0: begin
+                                                read_x <= tetromino_x + 1;
+                                                read_y <= tetromino_y;
+                                            end
+                                            3'd1: begin
+                                                read_x <= tetromino_x + 1;
+                                                read_y <= tetromino_y + 1;
+                                            end
+                                            3'd2: begin
+                                                read_x <= tetromino_x + 1;
+                                                read_y <= tetromino_y + 2;
+                                            end
+                                            3'd3: begin
+                                                read_x <= tetromino_x;
+                                                read_y <= tetromino_y + 2;
+                                            end
+                                        endcase
                                     end
                                 endcase
                             end
                         endcase
                     end // End of J
                     S: begin
-                        case (requestMovableCheck)
-                            DOWN: begin
-                                case (check_movable_count)
-                                    3'd0: begin
-                                        read_x <= tetromino_x;
-                                        read_y <= tetromino_y + 3;
+                        case (spin_state % 2)
+                            ORIG: begin
+                                case (requestMovableCheck)
+                                    DOWN: begin
+                                        case (check_movable_count)
+                                            3'd0: begin
+                                                read_x <= tetromino_x;
+                                                read_y <= tetromino_y + 3;
+                                            end
+                                            3'd1: begin
+                                                read_x <= tetromino_x + 1;
+                                                read_y <= tetromino_y + 3;
+                                            end
+                                            3'd2: begin
+                                                read_x <= tetromino_x + 2;
+                                                read_y <= tetromino_y + 2;
+                                            end
+                                        endcase
                                     end
-                                    3'd1: begin
-                                        read_x <= tetromino_x + 1;
-                                        read_y <= tetromino_y + 3;
+                                    LEFT: begin
+                                        case (check_movable_count)
+                                            3'd0: begin
+                                                read_x <= tetromino_x;
+                                                read_y <= tetromino_y + 1;
+                                            end
+                                            3'd1: begin
+                                                read_x <= tetromino_x - 1;
+                                                read_y <= tetromino_y + 2;
+                                            end
+                                        endcase
                                     end
-                                    3'd2: begin
-                                        read_x <= tetromino_x + 2;
-                                        read_y <= tetromino_y + 2;
+                                    RIGHT: begin
+                                        case (check_movable_count)
+                                            3'd0: begin
+                                                read_x <= tetromino_x + 2;
+                                                read_y <= tetromino_y + 1;
+                                            end
+                                            3'd1: begin
+                                                read_x <= tetromino_x + 2;
+                                                read_y <= tetromino_y + 2;
+                                            end
+                                        endcase
+                                    end
+                                    SPIN_L: begin
+                                        case (check_movable_count)
+                                            3'd0: begin
+                                                read_x <= tetromino_x + 1;
+                                                read_y <= tetromino_y;
+                                            end
+                                            3'd1: begin
+                                                read_x <= tetromino_x + 1;
+                                                read_y <= tetromino_y + 1;
+                                            end
+                                            3'd2: begin
+                                                read_x <= tetromino_x + 2;
+                                                read_y <= tetromino_y + 1;
+                                            end
+                                            3'd3: begin
+                                                read_x <= tetromino_x + 2;
+                                                read_y <= tetromino_y + 2;
+                                            end
+                                        endcase
                                     end
                                 endcase
                             end
-                            LEFT: begin
-                                case (check_movable_count)
-                                    3'd0: begin
-                                        read_x <= tetromino_x;
-                                        read_y <= tetromino_y + 1;
+                            L_1: begin
+                                case (requestMovableCheck)
+                                    DOWN: begin
+                                        case (check_movable_count)
+                                            3'd0: begin
+                                                read_x <= tetromino_x + 1;
+                                                read_y <= tetromino_y + 2;
+                                            end
+                                            3'd1: begin
+                                                read_x <= tetromino_x + 2;
+                                                read_y <= tetromino_y + 3;
+                                            end
+                                        endcase
                                     end
-                                    3'd1: begin
-                                        read_x <= tetromino_x - 1;
-                                        read_y <= tetromino_y + 2;
+                                    LEFT: begin
+                                        case (check_movable_count)
+                                            3'd0: begin
+                                                read_x <= tetromino_x;
+                                                read_y <= tetromino_y;
+                                            end
+                                            3'd1: begin
+                                                read_x <= tetromino_x;
+                                                read_y <= tetromino_y + 1;
+                                            end
+                                            3'd2: begin
+                                                read_x <= tetromino_x + 1;
+                                                read_y <= tetromino_y + 2;
+                                            end
+                                        endcase
                                     end
-                                endcase
-                            end
-                            RIGHT: begin
-                                case (check_movable_count)
-                                    3'd0: begin
-                                        read_x <= tetromino_x + 2;
-                                        read_y <= tetromino_y + 1;
+                                    RIGHT: begin
+                                        case (check_movable_count)
+                                            3'd0: begin
+                                                read_x <= tetromino_x + 2;
+                                                read_y <= tetromino_y;
+                                            end
+                                            3'd1: begin
+                                                read_x <= tetromino_x + 3;
+                                                read_y <= tetromino_y + 1;
+                                            end
+                                            3'd2: begin
+                                                read_x <= tetromino_x + 3;
+                                                read_y <= tetromino_y + 2;
+                                            end
+                                        endcase
                                     end
-                                    3'd1: begin
-                                        read_x <= tetromino_x + 2;
-                                        read_y <= tetromino_y + 2;
-                                    end
-                                endcase
-                            end
-                            SPIN_L: begin
-                                case (check_movable_count)
-                                    3'd0: begin
-                                        read_x <= tetromino_x + 1;
-                                        read_y <= tetromino_y;
-                                    end
-                                    3'd1: begin
-                                        read_x <= tetromino_x + 1;
-                                        read_y <= tetromino_y + 1;
-                                    end
-                                    3'd2: begin
-                                        read_x <= tetromino_x + 2;
-                                        read_y <= tetromino_y + 1;
-                                    end
-                                    3'd3: begin
-                                        read_x <= tetromino_x + 2;
-                                        read_y <= tetromino_y + 2;
+                                    SPIN_L: begin
+                                        case (check_movable_count)
+                                            3'd0: begin
+                                                read_x <= tetromino_x;
+                                                read_y <= tetromino_y + 2;
+                                            end
+                                            3'd1: begin
+                                                read_x <= tetromino_x + 1;
+                                                read_y <= tetromino_y + 2;
+                                            end
+                                            3'd2: begin
+                                                read_x <= tetromino_x + 1;
+                                                read_y <= tetromino_y + 1;
+                                            end
+                                            3'd3: begin
+                                                read_x <= tetromino_x + 2;
+                                                read_y <= tetromino_y + 1;
+                                            end
+                                        endcase
                                     end
                                 endcase
                             end
                         endcase
                     end // End of S
                     Z: begin
-                        case (requestMovableCheck)
-                            DOWN: begin
-                                case (check_movable_count)
-                                    3'd0: begin
-                                        read_x <= tetromino_x;
-                                        read_y <= tetromino_y + 2;
+                        case (spin_state % 2)
+                            ORIG: begin
+                                case (requestMovableCheck)
+                                    DOWN: begin
+                                        case (check_movable_count)
+                                            3'd0: begin
+                                                read_x <= tetromino_x;
+                                                read_y <= tetromino_y + 2;
+                                            end
+                                            3'd1: begin
+                                                read_x <= tetromino_x + 1;
+                                                read_y <= tetromino_y + 3;
+                                            end
+                                            3'd2: begin
+                                                read_x <= tetromino_x + 2;
+                                                read_y <= tetromino_y + 3;
+                                            end
+                                        endcase
                                     end
-                                    3'd1: begin
-                                        read_x <= tetromino_x + 1;
-                                        read_y <= tetromino_y + 3;
+                                    LEFT: begin
+                                        case (check_movable_count)
+                                            3'd0: begin
+                                                read_x <= tetromino_x - 1;
+                                                read_y <= tetromino_y + 1;
+                                            end
+                                            3'd1: begin
+                                                read_x <= tetromino_x;
+                                                read_y <= tetromino_y + 2;
+                                            end
+                                        endcase
                                     end
-                                    3'd2: begin
-                                        read_x <= tetromino_x + 2;
-                                        read_y <= tetromino_y + 3;
+                                    RIGHT: begin
+                                        case (check_movable_count)
+                                            3'd0: begin
+                                                read_x <= tetromino_x + 2;
+                                                read_y <= tetromino_y + 1;
+                                            end
+                                            3'd1: begin
+                                                read_x <= tetromino_x + 3;
+                                                read_y <= tetromino_y + 2;
+                                            end
+                                        endcase
+                                    end
+                                    SPIN_L: begin
+                                        case (check_movable_count)
+                                            3'd0: begin
+                                                read_x <= tetromino_x + 1;
+                                                read_y <= tetromino_y;
+                                            end
+                                            3'd1: begin
+                                                read_x <= tetromino_x + 1;
+                                                read_y <= tetromino_y + 1;
+                                            end
+                                            3'd2: begin
+                                                read_x <= tetromino_x;
+                                                read_y <= tetromino_y + 1;
+                                            end
+                                            3'd3: begin
+                                                read_x <= tetromino_x;
+                                                read_y <= tetromino_y + 2;
+                                            end
+                                        endcase
                                     end
                                 endcase
                             end
-                            LEFT: begin
-                                case (check_movable_count)
-                                    3'd0: begin
-                                        read_x <= tetromino_x - 1;
-                                        read_y <= tetromino_y + 1;
+                            L_1: begin
+                                case (requestMovableCheck)
+                                    DOWN: begin
+                                        case (check_movable_count)
+                                            3'd0: begin
+                                                read_x <= tetromino_x;
+                                                read_y <= tetromino_y + 3;
+                                            end
+                                            3'd1: begin
+                                                read_x <= tetromino_x + 1;
+                                                read_y <= tetromino_y + 2;
+                                            end
+                                        endcase
                                     end
-                                    3'd1: begin
-                                        read_x <= tetromino_x;
-                                        read_y <= tetromino_y + 2;
+                                    LEFT: begin
+                                        case (check_movable_count)
+                                            3'd0: begin
+                                                read_x <= tetromino_x;
+                                                read_y <= tetromino_y;
+                                            end
+                                            3'd1: begin
+                                                read_x <= tetromino_x - 1;
+                                                read_y <= tetromino_y + 1;
+                                            end
+                                            3'd2: begin
+                                                read_x <= tetromino_x - 1;
+                                                read_y <= tetromino_y + 2;
+                                            end
+                                        endcase
                                     end
-                                endcase
-                            end
-                            RIGHT: begin
-                                case (check_movable_count)
-                                    3'd0: begin
-                                        read_x <= tetromino_x + 2;
-                                        read_y <= tetromino_y + 1;
+                                    RIGHT: begin
+                                        case (check_movable_count)
+                                            3'd0: begin
+                                                read_x <= tetromino_x + 2;
+                                                read_y <= tetromino_y;
+                                            end
+                                            3'd1: begin
+                                                read_x <= tetromino_x + 2;
+                                                read_y <= tetromino_y + 1;
+                                            end
+                                            3'd2: begin
+                                                read_x <= tetromino_x + 1;
+                                                read_y <= tetromino_y + 2;
+                                            end
+                                        endcase
                                     end
-                                    3'd1: begin
-                                        read_x <= tetromino_x + 3;
-                                        read_y <= tetromino_y + 2;
-                                    end
-                                endcase
-                            end
-                            SPIN_L: begin
-                                case (check_movable_count)
-                                    3'd0: begin
-                                        read_x <= tetromino_x + 1;
-                                        read_y <= tetromino_y;
-                                    end
-                                    3'd1: begin
-                                        read_x <= tetromino_x + 1;
-                                        read_y <= tetromino_y + 1;
-                                    end
-                                    3'd2: begin
-                                        read_x <= tetromino_x;
-                                        read_y <= tetromino_y + 1;
-                                    end
-                                    3'd3: begin
-                                        read_x <= tetromino_x;
-                                        read_y <= tetromino_y + 2;
+                                    SPIN_L: begin
+                                        case (check_movable_count)
+                                            3'd0: begin
+                                                read_x <= tetromino_x;
+                                                read_y <= tetromino_y + 1;
+                                            end
+                                            3'd1: begin
+                                                read_x <= tetromino_x + 1;
+                                                read_y <= tetromino_y + 1;
+                                            end
+                                            3'd2: begin
+                                                read_x <= tetromino_x + 1;
+                                                read_y <= tetromino_y + 2;
+                                            end
+                                            3'd3: begin
+                                                read_x <= tetromino_x + 2;
+                                                read_y <= tetromino_y + 2;
+                                            end
+                                        endcase
                                     end
                                 endcase
                             end
                         endcase
                     end // End of Z
                     T: begin
-                        case (requestMovableCheck)
-                            DOWN: begin
-                                case (check_movable_count)
-                                    3'd0: begin
-                                        read_x <= tetromino_x;
-                                        read_y <= tetromino_y + 2;
+                        case (spin_state)
+                            ORIG: begin
+                                case (requestMovableCheck)
+                                    DOWN: begin
+                                        case (check_movable_count)
+                                            3'd0: begin
+                                                read_x <= tetromino_x;
+                                                read_y <= tetromino_y + 2;
+                                            end
+                                            3'd1: begin
+                                                read_x <= tetromino_x + 1;
+                                                read_y <= tetromino_y + 2;
+                                            end
+                                            3'd2: begin
+                                                read_x <= tetromino_x + 2;
+                                                read_y <= tetromino_y + 2;
+                                            end
+                                        endcase
                                     end
-                                    3'd1: begin
-                                        read_x <= tetromino_x + 1;
-                                        read_y <= tetromino_y + 2;
+                                    LEFT: begin
+                                        case (check_movable_count)
+                                            3'd0: begin
+                                                read_x <= tetromino_x;
+                                                read_y <= tetromino_y;
+                                            end
+                                            3'd1: begin
+                                                read_x <= tetromino_x - 1;
+                                                read_y <= tetromino_y + 1;
+                                            end
+                                        endcase
                                     end
-                                    3'd2: begin
-                                        read_x <= tetromino_x + 2;
-                                        read_y <= tetromino_y + 2;
+                                    RIGHT: begin
+                                        case (check_movable_count)
+                                            3'd0: begin
+                                                read_x <= tetromino_x + 2;
+                                                read_y <= tetromino_y;
+                                            end
+                                            3'd1: begin
+                                                read_x <= tetromino_x + 3;
+                                                read_y <= tetromino_y + 1;
+                                            end
+                                        endcase
+                                    end
+                                    SPIN_L: begin
+                                        case (check_movable_count)
+                                            3'd0: begin
+                                                read_x <= tetromino_x + 1;
+                                                read_y <= tetromino_y;
+                                            end
+                                            3'd1: begin
+                                                read_x <= tetromino_x;
+                                                read_y <= tetromino_y + 1;
+                                            end
+                                            3'd2: begin
+                                                read_x <= tetromino_x;
+                                                read_y <= tetromino_y + 1;
+                                            end
+                                            3'd3: begin
+                                                read_x <= tetromino_x + 1;
+                                                read_y <= tetromino_y + 2;
+                                            end
+                                        endcase
                                     end
                                 endcase
                             end
-                            LEFT: begin
-                                case (check_movable_count)
-                                    3'd0: begin
-                                        read_x <= tetromino_x;
-                                        read_y <= tetromino_y;
+                            L_1: begin
+                                case (requestMovableCheck)
+                                    DOWN: begin
+                                        case (check_movable_count)
+                                            3'd0: begin
+                                                read_x <= tetromino_x;
+                                                read_y <= tetromino_y + 2;
+                                            end
+                                            3'd1: begin
+                                                read_x <= tetromino_x + 1;
+                                                read_y <= tetromino_y + 3;
+                                            end
+                                        endcase
                                     end
-                                    3'd1: begin
-                                        read_x <= tetromino_x - 1;
-                                        read_y <= tetromino_y + 1;
+                                    LEFT: begin
+                                        case (check_movable_count)
+                                            3'd0: begin
+                                                read_x <= tetromino_x;
+                                                read_y <= tetromino_y;
+                                            end
+                                            3'd1: begin
+                                                read_x <= tetromino_x - 1;
+                                                read_y <= tetromino_y + 1;
+                                            end
+                                            3'd2: begin
+                                                read_x <= tetromino_x;
+                                                read_y <= tetromino_y + 2;
+                                            end
+                                        endcase
+                                    end
+                                    RIGHT: begin
+                                        case (check_movable_count)
+                                            3'd0: begin
+                                                read_x <= tetromino_x + 2;
+                                                read_y <= tetromino_y;
+                                            end
+                                            3'd1: begin
+                                                read_x <= tetromino_x + 2;
+                                                read_y <= tetromino_y + 1;
+                                            end
+                                            3'd2: begin
+                                                read_x <= tetromino_x + 2;
+                                                read_y <= tetromino_y + 2;
+                                            end
+                                        endcase
+                                    end
+                                    SPIN_L: begin
+                                        case (check_movable_count)
+                                            3'd0: begin
+                                                read_x <= tetromino_x;
+                                                read_y <= tetromino_y + 1;
+                                            end
+                                            3'd1: begin
+                                                read_x <= tetromino_x + 1;
+                                                read_y <= tetromino_y + 1;
+                                            end
+                                            3'd2: begin
+                                                read_x <= tetromino_x + 1;
+                                                read_y <= tetromino_y + 2;
+                                            end
+                                            3'd3: begin
+                                                read_x <= tetromino_x + 2;
+                                                read_y <= tetromino_y + 1;
+                                            end
+                                        endcase
                                     end
                                 endcase
                             end
-                            RIGHT: begin
-                                case (check_movable_count)
-                                    3'd0: begin
-                                        read_x <= tetromino_x + 2;
-                                        read_y <= tetromino_y;
+                            L_2: begin
+                                case (requestMovableCheck)
+                                    DOWN: begin
+                                        case (check_movable_count)
+                                            3'd0: begin
+                                                read_x <= tetromino_x;
+                                                read_y <= tetromino_y + 2;
+                                            end
+                                            3'd1: begin
+                                                read_x <= tetromino_x + 1;
+                                                read_y <= tetromino_y + 3;
+                                            end
+                                            3'd2: begin
+                                                read_x <= tetromino_x + 2;
+                                                read_y <= tetromino_y + 2;
+                                            end
+                                        endcase
                                     end
-                                    3'd1: begin
-                                        read_x <= tetromino_x + 3;
-                                        read_y <= tetromino_y + 1;
+                                    LEFT: begin
+                                        case (check_movable_count)
+                                            3'd0: begin
+                                                read_x <= tetromino_x - 1;
+                                                read_y <= tetromino_y + 1;
+                                            end
+                                            3'd1: begin
+                                                read_x <= tetromino_x;
+                                                read_y <= tetromino_y + 2;
+                                            end
+                                        endcase
+                                    end
+                                    RIGHT: begin
+                                        case (check_movable_count)
+                                            3'd0: begin
+                                                read_x <= tetromino_x + 3;
+                                                read_y <= tetromino_y + 1;
+                                            end
+                                            3'd1: begin
+                                                read_x <= tetromino_x + 2;
+                                                read_y <= tetromino_y + 2;
+                                            end
+                                        endcase
+                                    end
+                                    SPIN_L: begin
+                                        case (check_movable_count)
+                                            3'd0: begin
+                                                read_x <= tetromino_x + 1;
+                                                read_y <= tetromino_y;
+                                            end
+                                            3'd1: begin
+                                                read_x <= tetromino_x + 1;
+                                                read_y <= tetromino_y + 1;
+                                            end
+                                            3'd2: begin
+                                                read_x <= tetromino_x + 1;
+                                                read_y <= tetromino_y + 2;
+                                            end
+                                            3'd3: begin
+                                                read_x <= tetromino_x + 2;
+                                                read_y <= tetromino_y + 1;
+                                            end
+                                        endcase
                                     end
                                 endcase
                             end
-                            SPIN_L: begin
-                                case (check_movable_count)
-                                    3'd0: begin
-                                        read_x <= tetromino_x + 1;
-                                        read_y <= tetromino_y;
+                            L_3: begin
+                                case (requestMovableCheck)
+                                    DOWN: begin
+                                        case (check_movable_count)
+                                            3'd0: begin
+                                                read_x <= tetromino_x + 1;
+                                                read_y <= tetromino_y + 3;
+                                            end
+                                            3'd1: begin
+                                                read_x <= tetromino_x + 2;
+                                                read_y <= tetromino_y + 2;
+                                            end
+                                        endcase
                                     end
-                                    3'd1: begin
-                                        read_x <= tetromino_x;
-                                        read_y <= tetromino_y + 1;
+                                    LEFT: begin
+                                        case (check_movable_count)
+                                            3'd0: begin
+                                                read_x <= tetromino_x;
+                                                read_y <= tetromino_y + 1;
+                                            end
+                                            3'd1: begin
+                                                read_x <= tetromino_x;
+                                                read_y <= tetromino_y + 2;
+                                            end
+                                            3'd2: begin
+                                                read_x <= tetromino_x;
+                                                read_y <= tetromino_y + 3;
+                                            end
+                                        endcase
                                     end
-                                    3'd2: begin
-                                        read_x <= tetromino_x;
-                                        read_y <= tetromino_y + 1;
+                                    RIGHT: begin
+                                        case (check_movable_count)
+                                            3'd0: begin
+                                                read_x <= tetromino_x + 2;
+                                                read_y <= tetromino_y;
+                                            end
+                                            3'd1: begin
+                                                read_x <= tetromino_x + 3;
+                                                read_y <= tetromino_y + 1;
+                                            end
+                                            3'd2: begin
+                                                read_x <= tetromino_x + 2;
+                                                read_y <= tetromino_y + 2;
+                                            end
+                                        endcase
                                     end
-                                    3'd3: begin
-                                        read_x <= tetromino_x + 1;
-                                        read_y <= tetromino_y + 2;
+                                    SPIN_L: begin
+                                        case (check_movable_count)
+                                            3'd0: begin
+                                                read_x <= tetromino_x + 1;
+                                                read_y <= tetromino_y;
+                                            end
+                                            3'd1: begin
+                                                read_x <= tetromino_x;
+                                                read_y <= tetromino_y + 1;
+                                            end
+                                            3'd2: begin
+                                                read_x <= tetromino_x + 1;
+                                                read_y <= tetromino_y + 1;
+                                            end
+                                            3'd3: begin
+                                                read_x <= tetromino_x + 2;
+                                                read_y <= tetromino_y + 1;
+                                            end
+                                        endcase
                                     end
                                 endcase
                             end
@@ -1010,7 +2099,7 @@ always @(posedge CLOCK_50 or negedge RST) begin
             else begin
                 request_erase <= 1'b0;
                 erased <= 1'b0;
-                // Go to whatever state the transition was approved
+                // Go to whatever state the movement was approved
                 case (requestMovableCheck)
                     DOWN:   STATE <= MOVE_ONE_DOWN;
                     LEFT:   STATE <= MOVE_LEFT;
@@ -1051,6 +2140,7 @@ always @(posedge CLOCK_50 or negedge RST) begin
         SPIN_LEFT: begin
             we <= 1'b1;
             requestMovableCheck <= NONE;
+            spin_state <= spin_state + 1;
             forceReset <= 1'b1;
             STATE <= SET_COLOR;
         end
@@ -1172,10 +2262,11 @@ always @(posedge CLOCK_50 or negedge RST) begin
     endcase
     end
 end
-reg [7:0] dbg;
+reg dbg;
 // Show content on SRAM
 always @(*) begin
-    LEDR = {STATE};
+    LEDR = dbg;
+    //spin_state = SW[14:13];
     // Paint in black if it's outside the field
     if ((mCoord_X < 220 || (mCoord_X >= 420 && mCoord_X < 640))
         // 60 not 20 because the first 2 "grids" are not shown
