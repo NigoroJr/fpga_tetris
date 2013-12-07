@@ -240,7 +240,7 @@ reg [2:0] check_movable_count;
 // Used to initialize the SRAM
 reg [5:0] init_x, init_y;
 // Calculate next state
-always @(posedge CLOCK_50 or negedge RST) begin
+always @(posedge VGA_CTRL_CLK or negedge RST) begin
     if (RST == 1'b0) begin
         // The following have to be initialized here because it will be used in INIT state
         init_x <= 6'd0;
@@ -746,17 +746,19 @@ always @(posedge CLOCK_50 or negedge RST) begin
         WAIT: begin
             // Move when there was key input
             if (move_left_key == 1'b1) begin
+                isMovable <= 1'b1;
                 requestMovableCheck <= LEFT;
                 check_movable_count <= 3'd0;
                 STATE <= CHECK_IF_MOVABLE;
             end
             else if (move_right_key == 1'b1) begin
+                isMovable <= 1'b1;
                 requestMovableCheck <= RIGHT;
                 check_movable_count <= 3'd0;
                 STATE <= CHECK_IF_MOVABLE;
             end
             else if (spin_left_key == 1'b1) begin
-dbg <= 1'b1;
+                isMovable <= 1'b1;
                 requestMovableCheck <= SPIN_L;
                 check_movable_count <= 3'd0;
                 STATE <= CHECK_IF_MOVABLE;
@@ -787,31 +789,28 @@ dbg <= 1'b1;
             //      Specify address => read_x, read_y
 
             we <= 1'b1;
-            if (isMovable == 1'b0 || check_movable_count == 3'd4) begin
+            if (isMovable == 1'b0) begin
+                // Reset isMovable to 1 (movable)
+                isMovable <= 1'b1;
+                // If it couldn't move downward anymore
+                if (requestMovableCheck == DOWN) begin
+                    STATE <= CHECK_COMPLETE_ROW;
+                    read_x <= 6'd0;
+                    read_y <= 6'd22;
+                end
+                // If LEFT or RIGHT was requested and wasn't approved, check for downward movement
+                else begin
+                    requestMovableCheck <= DOWN;
+                    // Note: The timer will be going on while we're in this state because forceReset is not 1
+                    STATE <= WAIT;
+                end
+            end
+            else if (check_movable_count == 3'd4) begin
                 // Reset counter
                 check_movable_count <= 3'd0;
                 isReadColor <= 1'b0;
-                if (isMovable == 1'b0) begin
-                    // Reset isMovable to 1 (movable)
-                    isMovable <= 1'b1;
-                    // If it couldn't move downward anymore
-                    if (requestMovableCheck == DOWN) begin
-                        STATE <= CHECK_COMPLETE_ROW;
-                        // TODO: Shouldn't this be -1?
-                        read_x <= 6'd0;
-                        read_y <= 6'd22;
-                    end
-                    // If LEFT or RIGHT was requested and wasn't approved, check for downward movement
-                    else begin
-                        requestMovableCheck <= DOWN;
-                        // Note: The timer will be going on while we're in this state because forceReset is not 1
-                        STATE <= WAIT;
-                    end
-                end
-                // If request was approved
-                else begin
-                    STATE <= REMOVE_COLOR;
-                end
+                // Request was approved
+                STATE <= REMOVE_COLOR;
             end
             else begin
                 // Important in order to *read* from SRAM
@@ -1568,7 +1567,7 @@ dbg <= 1'b1;
                                     RIGHT: begin
                                         case (check_movable_count)
                                             3'd0: begin
-                                                read_x <= tetromino_x + 2;
+                                                read_x <= tetromino_x + 3;
                                                 read_y <= tetromino_y + 1;
                                             end
                                             3'd1: begin
@@ -2077,12 +2076,13 @@ dbg <= 1'b1;
             end
         end // End of CHECK_IF_MOVABLE
         CHECK_BUFFER: begin
+            isReadColor <= 1'b0;
             check_movable_count <= check_movable_count + 1;
             STATE <= CHECK_IF_MOVABLE;
             // Make isMovable 0 if next grid is NOT white or within the field
-            isMovable <= (color_read == WHITE)
-                & read_x >= 0 & read_x < 10
-                & read_y >= 0 & read_y < 22;
+            isMovable <= color_read == WHITE
+                && read_x >= 0 && read_x < 10
+                && read_y >= 0 && read_y < 22;
         end
         // Erase current Tetromino from the field. Used when moving.
         REMOVE_COLOR: begin
@@ -2105,8 +2105,8 @@ dbg <= 1'b1;
                     LEFT:   STATE <= MOVE_LEFT;
                     RIGHT:  STATE <= MOVE_RIGHT;
                     SPIN_L: STATE <= SPIN_LEFT;
-                    // Can't happen (a.k.a. TODO: Find out why this happens...)
-                    default:STATE <= MOVE_ONE_DOWN;
+                    // Can't happen
+                    default:STATE <= INIT;
                 endcase
             end
         end
@@ -2265,7 +2265,6 @@ end
 reg dbg;
 // Show content on SRAM
 always @(*) begin
-    LEDR = dbg;
     //spin_state = SW[14:13];
     // Paint in black if it's outside the field
     if ((mCoord_X < 220 || (mCoord_X >= 420 && mCoord_X < 640))
