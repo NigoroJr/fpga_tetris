@@ -246,12 +246,9 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
         init_x <= 6'd0;
         init_y <= 6'd0;
         isReadColor <= 1'b0;
-        // TODO: check if these are really necessary. for now, better safe than sorry :)
         requestMovableCheck <= 3'd0;
         isMovable <= 1'b1;
-        spin_state <= ORIG;
         STATE <= INIT;
-        dbg <= 1'b0;
     end
     else begin
     case (STATE)
@@ -281,6 +278,7 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
             end
         end
         GENERATE: begin
+            spin_state <= ORIG;
             we <= 1'b1;
             // TODO: get random number
             current_tetromino <= SW[17:15];
@@ -746,19 +744,16 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
         WAIT: begin
             // Move when there was key input
             if (move_left_key == 1'b1) begin
-                isMovable <= 1'b1;
                 requestMovableCheck <= LEFT;
                 check_movable_count <= 3'd0;
                 STATE <= CHECK_IF_MOVABLE;
             end
             else if (move_right_key == 1'b1) begin
-                isMovable <= 1'b1;
                 requestMovableCheck <= RIGHT;
                 check_movable_count <= 3'd0;
                 STATE <= CHECK_IF_MOVABLE;
             end
             else if (spin_left_key == 1'b1) begin
-                isMovable <= 1'b1;
                 requestMovableCheck <= SPIN_L;
                 check_movable_count <= 3'd0;
                 STATE <= CHECK_IF_MOVABLE;
@@ -781,12 +776,17 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
             TODO: Add explanation of how this works
         */
         CHECK_IF_MOVABLE: begin
-            // Variables:
-            //      Type of request => requestMovableCheck
-            //      Result set to   => isMovable
-            //      Counter         => check_movable_count
-            //      SRAM content    => color_read
-            //      Specify address => read_x, read_y
+            /* Variables:
+                    Type of request => requestMovableCheck
+                    Result set to   => isMovable
+                    Counter         => check_movable_count
+                    SRAM content    => color_read
+                    Specify address => read_x, read_y
+
+                Important
+                    Make sure to consider the overlap when spinning!
+            */
+            
 
             we <= 1'b1;
             if (isMovable == 1'b0) begin
@@ -871,10 +871,6 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
                                                 read_x <= tetromino_x + 1;
                                                 read_y <= tetromino_y + 3;
                                             end
-                                            3'd3: begin
-                                                read_x <= tetromino_x + 1;
-                                                read_y <= tetromino_y + 1;
-                                            end
                                         endcase
                                     end
                                 endcase
@@ -936,14 +932,10 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
                                                 read_y <= tetromino_y + 1;
                                             end
                                             3'd1: begin
-                                                read_x <= tetromino_x + 1;
-                                                read_y <= tetromino_y + 1;
-                                            end
-                                            3'd2: begin
                                                 read_x <= tetromino_x + 2;
                                                 read_y <= tetromino_y + 1;
                                             end
-                                            3'd3: begin
+                                            3'd2: begin
                                                 read_x <= tetromino_x + 3;
                                                 read_y <= tetromino_y + 1;
                                             end
@@ -1051,14 +1043,10 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
                                                 read_y <= tetromino_y + 1;
                                             end
                                             3'd1: begin
-                                                read_x <= tetromino_x + 1;
-                                                read_y <= tetromino_y + 1;
-                                            end
-                                            3'd2: begin
                                                 read_x <= tetromino_x + 2;
                                                 read_y <= tetromino_y + 1;
                                             end
-                                            3'd3: begin
+                                            3'd2: begin
                                                 read_x <= tetromino_x + 2;
                                                 read_y <= tetromino_y;
                                             end
@@ -1119,10 +1107,6 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
                                                 read_y <= tetromino_y;
                                             end
                                             3'd2: begin
-                                                read_x <= tetromino_x + 1;
-                                                read_y <= tetromino_y + 1;
-                                            end
-                                            3'd3: begin
                                                 read_x <= tetromino_x + 1;
                                                 read_y <= tetromino_y + 2;
                                             end
@@ -1187,10 +1171,6 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
                                                 read_y <= tetromino_y + 2;
                                             end
                                             3'd2: begin
-                                                read_x <= tetromino_x + 1;
-                                                read_y <= tetromino_y + 1;
-                                            end
-                                            3'd3: begin
                                                 read_x <= tetromino_x + 2;
                                                 read_y <= tetromino_y + 1;
                                             end
@@ -1243,19 +1223,15 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
                                     SPIN_L: begin
                                         case (check_movable_count)
                                             3'd0: begin
-                                                read_x <= tetromino_x;
+                                                read_x <= tetromino_x + 1;
                                                 read_y <= tetromino_y;
                                             end
                                             3'd1: begin
-                                                read_x <= tetromino_x;
-                                                read_y <= tetromino_y + 1;
-                                            end
-                                            3'd2: begin
-                                                read_x <= tetromino_x;
+                                                read_x <= tetromino_x + 1;
                                                 read_y <= tetromino_y + 2;
                                             end
-                                            3'd3: begin
-                                                read_x <= tetromino_x + 1;
+                                            3'd2: begin
+                                                read_x <= tetromino_x + 2;
                                                 read_y <= tetromino_y + 2;
                                             end
                                         endcase
@@ -1319,14 +1295,10 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
                                                 read_y <= tetromino_y + 1;
                                             end
                                             3'd1: begin
-                                                read_x <= tetromino_x + 1;
-                                                read_y <= tetromino_y + 1;
-                                            end
-                                            3'd2: begin
                                                 read_x <= tetromino_x + 2;
                                                 read_y <= tetromino_y + 1;
                                             end
-                                            3'd3: begin
+                                            3'd2: begin
                                                 read_x <= tetromino_x + 2;
                                                 read_y <= tetromino_y + 2;
                                             end
@@ -1387,10 +1359,6 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
                                                 read_y <= tetromino_y;
                                             end
                                             3'd2: begin
-                                                read_x <= tetromino_x + 1;
-                                                read_y <= tetromino_y + 1;
-                                            end
-                                            3'd3: begin
                                                 read_x <= tetromino_x + 1;
                                                 read_y <= tetromino_y + 2;
                                             end
@@ -1455,10 +1423,6 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
                                                 read_y <= tetromino_y + 1;
                                             end
                                             3'd2: begin
-                                                read_x <= tetromino_x + 1;
-                                                read_y <= tetromino_y + 1;
-                                            end
-                                            3'd3: begin
                                                 read_x <= tetromino_x + 2;
                                                 read_y <= tetromino_y + 1;
                                             end
@@ -1516,13 +1480,9 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
                                             end
                                             3'd1: begin
                                                 read_x <= tetromino_x + 1;
-                                                read_y <= tetromino_y + 1;
-                                            end
-                                            3'd2: begin
-                                                read_x <= tetromino_x + 1;
                                                 read_y <= tetromino_y + 2;
                                             end
-                                            3'd3: begin
+                                            3'd2: begin
                                                 read_x <= tetromino_x;
                                                 read_y <= tetromino_y + 2;
                                             end
@@ -1583,14 +1543,6 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
                                                 read_y <= tetromino_y;
                                             end
                                             3'd1: begin
-                                                read_x <= tetromino_x + 1;
-                                                read_y <= tetromino_y + 1;
-                                            end
-                                            3'd2: begin
-                                                read_x <= tetromino_x + 2;
-                                                read_y <= tetromino_y + 1;
-                                            end
-                                            3'd3: begin
                                                 read_x <= tetromino_x + 2;
                                                 read_y <= tetromino_y + 2;
                                             end
@@ -1653,14 +1605,6 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
                                             3'd1: begin
                                                 read_x <= tetromino_x + 1;
                                                 read_y <= tetromino_y + 2;
-                                            end
-                                            3'd2: begin
-                                                read_x <= tetromino_x + 1;
-                                                read_y <= tetromino_y + 1;
-                                            end
-                                            3'd3: begin
-                                                read_x <= tetromino_x + 2;
-                                                read_y <= tetromino_y + 1;
                                             end
                                         endcase
                                     end
@@ -1719,14 +1663,6 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
                                                 read_y <= tetromino_y;
                                             end
                                             3'd1: begin
-                                                read_x <= tetromino_x + 1;
-                                                read_y <= tetromino_y + 1;
-                                            end
-                                            3'd2: begin
-                                                read_x <= tetromino_x;
-                                                read_y <= tetromino_y + 1;
-                                            end
-                                            3'd3: begin
                                                 read_x <= tetromino_x;
                                                 read_y <= tetromino_y + 2;
                                             end
@@ -1783,18 +1719,10 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
                                     SPIN_L: begin
                                         case (check_movable_count)
                                             3'd0: begin
-                                                read_x <= tetromino_x;
-                                                read_y <= tetromino_y + 1;
-                                            end
-                                            3'd1: begin
-                                                read_x <= tetromino_x + 1;
-                                                read_y <= tetromino_y + 1;
-                                            end
-                                            3'd2: begin
                                                 read_x <= tetromino_x + 1;
                                                 read_y <= tetromino_y + 2;
                                             end
-                                            3'd3: begin
+                                            3'd1: begin
                                                 read_x <= tetromino_x + 2;
                                                 read_y <= tetromino_y + 2;
                                             end
@@ -1852,18 +1780,6 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
                                         case (check_movable_count)
                                             3'd0: begin
                                                 read_x <= tetromino_x + 1;
-                                                read_y <= tetromino_y;
-                                            end
-                                            3'd1: begin
-                                                read_x <= tetromino_x;
-                                                read_y <= tetromino_y + 1;
-                                            end
-                                            3'd2: begin
-                                                read_x <= tetromino_x;
-                                                read_y <= tetromino_y + 1;
-                                            end
-                                            3'd3: begin
-                                                read_x <= tetromino_x + 1;
                                                 read_y <= tetromino_y + 2;
                                             end
                                         endcase
@@ -1919,18 +1835,6 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
                                     SPIN_L: begin
                                         case (check_movable_count)
                                             3'd0: begin
-                                                read_x <= tetromino_x;
-                                                read_y <= tetromino_y + 1;
-                                            end
-                                            3'd1: begin
-                                                read_x <= tetromino_x + 1;
-                                                read_y <= tetromino_y + 1;
-                                            end
-                                            3'd2: begin
-                                                read_x <= tetromino_x + 1;
-                                                read_y <= tetromino_y + 2;
-                                            end
-                                            3'd3: begin
                                                 read_x <= tetromino_x + 2;
                                                 read_y <= tetromino_y + 1;
                                             end
@@ -1986,18 +1890,6 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
                                                 read_x <= tetromino_x + 1;
                                                 read_y <= tetromino_y;
                                             end
-                                            3'd1: begin
-                                                read_x <= tetromino_x + 1;
-                                                read_y <= tetromino_y + 1;
-                                            end
-                                            3'd2: begin
-                                                read_x <= tetromino_x + 1;
-                                                read_y <= tetromino_y + 2;
-                                            end
-                                            3'd3: begin
-                                                read_x <= tetromino_x + 2;
-                                                read_y <= tetromino_y + 1;
-                                            end
                                         endcase
                                     end
                                 endcase
@@ -2051,19 +1943,7 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
                                     SPIN_L: begin
                                         case (check_movable_count)
                                             3'd0: begin
-                                                read_x <= tetromino_x + 1;
-                                                read_y <= tetromino_y;
-                                            end
-                                            3'd1: begin
                                                 read_x <= tetromino_x;
-                                                read_y <= tetromino_y + 1;
-                                            end
-                                            3'd2: begin
-                                                read_x <= tetromino_x + 1;
-                                                read_y <= tetromino_y + 1;
-                                            end
-                                            3'd3: begin
-                                                read_x <= tetromino_x + 2;
                                                 read_y <= tetromino_y + 1;
                                             end
                                         endcase
@@ -2106,7 +1986,7 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
                     RIGHT:  STATE <= MOVE_RIGHT;
                     SPIN_L: STATE <= SPIN_LEFT;
                     // Can't happen
-                    default:STATE <= INIT;
+                    default:STATE <= MOVE_ONE_DOWN;
                 endcase
             end
         end
@@ -2262,7 +2142,7 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
     endcase
     end
 end
-reg dbg;
+
 // Show content on SRAM
 always @(*) begin
     //spin_state = SW[14:13];
