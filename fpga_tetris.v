@@ -180,10 +180,10 @@ parameter NONE      = 3'd0,
 reg [4:0] STATE;
 // Represents the state of rotation
 reg [1:0] spin_state;
-parameter ORIG = 2'd0,
-			 L_1	= 2'd1,
-			 L_2	= 2'd2,
-			 L_3	= 3'd3;
+parameter ORIG  = 2'd0,
+          L_1   = 2'd1,
+          L_2   = 2'd2,
+          L_3   = 3'd3;
 
 /*---- SRAM stuff ----*/
 // 1 when disabled, 0 when enabled (all the other boolean variables will follow the "common-sense")
