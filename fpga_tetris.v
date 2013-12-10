@@ -121,9 +121,8 @@ vga_sync u1(
     to this state, else, do counting or whatever you want to do.
 */
 wire SEC_CLK;
-reg [2:0] sec;
-reg forceReset;
-SecTimer secondClock(CLOCK_50, RST, sec, forceReset);
+reg [31:0] sec;
+SecTimer secondClock(CLOCK_50, RST, sec);
 
 // draw_? are decided at the very end of this file
 reg [3:0] draw_r, draw_g, draw_b;
@@ -150,8 +149,9 @@ parameter   INIT = 5'd0,
             GAME_OVER = 5'd16,
             DECREMENT_SHIFT_COUNT_Y = 5'd17,
             INCREMENT_SHIFT_COUNT_X = 5'd18,
-            COLOR_READ_BUFFER = 5'd19,
-            CHECK_BUFFER = 5'd20;
+            INCREMENT_DRAW_COUNT = 5'd19,
+            COLOR_READ_BUFFER = 5'd20,
+            CHECK_BUFFER = 5'd21;
 // Each Tetromino has a name
 parameter I = 3'd0,
           O = 3'd1,
@@ -183,7 +183,7 @@ reg [1:0] spin_state;
 parameter ORIG = 2'd0,
 			 L_1	= 2'd1,
 			 L_2	= 2'd2,
-			 L_3	= 3'd3;
+			 L_3	= 2'd3;
 
 /*---- SRAM stuff ----*/
 // 1 when disabled, 0 when enabled (all the other boolean variables will follow the "common-sense")
@@ -283,7 +283,7 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
             spin_state <= ORIG;
             we <= 1'b1;
             //current_tetromino <= SW[17:15];
-            current_tetromino <= random_tetromino;
+            current_tetromino <= random_tetromino % 7;
             // Set appearing position
             tetromino_x <= 6'd3;
             tetromino_y <= 6'd1;
@@ -294,8 +294,8 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
             // Tell WRITE_TO_SRAM that we drew the Tetromino
             erased <= 1'b0;
             STATE <= WRITE_TO_SRAM;
-            // Don't forget to initialize (another place in in REMOVE_COLOR)
-            draw_tetromino_count <= 0;
+            // Don't forget to initialize (another place is in REMOVE_COLOR)
+            draw_tetromino_count <= 3'd0;
             case (current_tetromino)
                 I: color <= CYAN;
                 O: color <= YELLOW;
@@ -316,7 +316,7 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
             if (draw_tetromino_count == 3'd4) begin
                 // Disable write
                 we <= 1'b1;
-                draw_tetromino_count <= 0;
+                draw_tetromino_count <= 3'd0;
                 // If the state was "called" by the REMOVE_COLOR state
                 if (request_erase == 1'b1) begin
                     STATE <= REMOVE_COLOR;
@@ -331,8 +331,9 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
             else begin
                 // Enable write
                 we <= 1'b0;
-                STATE <= WRITE_TO_SRAM;
-                draw_tetromino_count <= draw_tetromino_count + 1;
+                //STATE <= WRITE_TO_SRAM;
+                //draw_tetromino_count <= draw_tetromino_count + 1;
+                STATE <= INCREMENT_DRAW_COUNT;
                 // Draw Tetromino based on pivot
                 case (current_tetromino)
                     I: begin
@@ -743,34 +744,42 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
                 endcase
             end
         end // End of WRITE_TO_SRAM
+        INCREMENT_DRAW_COUNT: begin
+            we <= 1'b1;
+            isReadColor <= 1'b0;
+            draw_tetromino_count <= draw_tetromino_count + 1;
+            STATE <= WRITE_TO_SRAM;
+        end
         WAIT: begin
+            we <= 1'b1;
             // Move when there was key input
             if (move_left_key == 1'b1) begin
                 requestMovableCheck <= LEFT;
                 check_movable_count <= 3'd0;
+                isMovable <= 1'b1;
                 STATE <= CHECK_IF_MOVABLE;
             end
             else if (move_right_key == 1'b1) begin
                 requestMovableCheck <= RIGHT;
                 check_movable_count <= 3'd0;
+                isMovable <= 1'b1;
                 STATE <= CHECK_IF_MOVABLE;
             end
             else if (spin_left_key == 1'b1) begin
                 requestMovableCheck <= SPIN_L;
                 check_movable_count <= 3'd0;
+                isMovable <= 1'b1;
                 STATE <= CHECK_IF_MOVABLE;
             end
 
-            else if (forceReset == 1'b1) begin
-                forceReset <= 1'b0;
-                STATE <= WAIT;
-            end
-            else if (sec < 3'd1) begin
+            // TODO
+            else if (sec % 10 < 3'd1) begin
                 STATE <= WAIT;
             end
             // When it waited for a certain amount of time
             else begin
                 requestMovableCheck <= DOWN;
+                isMovable <= 1'b1;
                 STATE <= CHECK_IF_MOVABLE;
             end
         end
@@ -788,7 +797,6 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
                 Important
                     Make sure to consider the overlap when spinning!
             */
-            
 
             we <= 1'b1;
             if (isMovable == 1'b0) begin
@@ -803,7 +811,6 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
                 // If LEFT or RIGHT was requested and wasn't approved, check for downward movement
                 else begin
                     requestMovableCheck <= DOWN;
-                    // Note: The timer will be going on while we're in this state because forceReset is not 1
                     STATE <= WAIT;
                 end
             end
@@ -815,6 +822,7 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
                 STATE <= REMOVE_COLOR;
             end
             else begin
+                we <= 1'b1;
                 // Important in order to *read* from SRAM
                 isReadColor <= 1'b1;
                 STATE <= CHECK_BUFFER;
@@ -1958,13 +1966,14 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
             end
         end // End of CHECK_IF_MOVABLE
         CHECK_BUFFER: begin
+            we <= 1'b1;
             isReadColor <= 1'b0;
             check_movable_count <= check_movable_count + 1;
             STATE <= CHECK_IF_MOVABLE;
             // Make isMovable 0 if next grid is NOT white or within the field
-            isMovable <= color_read == WHITE
-                && read_x >= 0 && read_x < 10
-                && read_y >= 0 && read_y < 22;
+            isMovable <= (color_read == WHITE
+                && read_x >= 6'd0 && read_x < 6'd10
+                && read_y >= 6'd0 && read_y < 6'd22) ? 1'b1 : 1'b0;
         end
         // Erase current Tetromino from the field. Used when moving.
         REMOVE_COLOR: begin
@@ -1972,7 +1981,7 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
             // Note: You could also make a variable `BACKGROUND_COLOR` and set color to that.
             color <= WHITE;
             // Don't forget to initialize here, too (another place is in SET_COLOR)
-            draw_tetromino_count <= 0;
+            draw_tetromino_count <= 3'd0;
             // Erase grids if it hadn't been erased yet
             if (erased == 1'b0) begin
                 request_erase <= 1'b1;
@@ -1988,7 +1997,7 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
                     RIGHT:  STATE <= MOVE_RIGHT;
                     SPIN_L: STATE <= SPIN_LEFT;
                     // Can't happen
-                    default:STATE <= MOVE_ONE_DOWN;
+                    default:STATE <= INIT;
                 endcase
             end
         end
@@ -1997,8 +2006,6 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
             // Reset requestMovableCheck
             requestMovableCheck <= NONE;
             tetromino_y <= tetromino_y + 1;
-            // Reset timer
-            forceReset <= 1'b1;
             STATE <= SET_COLOR;
         end
         MOVE_LEFT: begin
@@ -2006,8 +2013,6 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
             // Reset requestMovableCheck
             requestMovableCheck <= NONE;
             tetromino_x <= tetromino_x - 1;
-            // Reset timer
-            forceReset <= 1'b1;
             STATE <= SET_COLOR;
         end
         MOVE_RIGHT: begin
@@ -2015,15 +2020,12 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
             // Reset requestMovableCheck
             requestMovableCheck <= NONE;
             tetromino_x <= tetromino_x + 1;
-            // Reset timer
-            forceReset <= 1'b1;
             STATE <= SET_COLOR;
         end
         SPIN_LEFT: begin
             we <= 1'b1;
             requestMovableCheck <= NONE;
             spin_state <= spin_state + 1;
-            forceReset <= 1'b1;
             STATE <= SET_COLOR;
         end
         CHECK_COMPLETE_ROW: begin
@@ -2147,7 +2149,7 @@ end
 
 // Show content on SRAM
 always @(*) begin
-    //spin_state = SW[14:13];
+    LEDR = STATE;
     // Paint in black if it's outside the field
     if ((mCoord_X < 220 || (mCoord_X >= 420 && mCoord_X < 640))
         // 60 not 20 because the first 2 "grids" are not shown
