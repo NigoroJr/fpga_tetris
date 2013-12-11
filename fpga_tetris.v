@@ -202,6 +202,7 @@ MoveKey toRight(~KEY[1], move_right_key, CLOCK_50, RST);
 MoveKey toSpinLeft(~KEY[2], spin_left_key, CLOCK_50, RST);
 // Generate random tetromino every clock
 RandomTetromino rand(CLOCK_50, RST, random_tetromino);
+
 /*
     Use the coordinates and see the field as grids of 20px by 20px
     |<-220->|
@@ -240,7 +241,7 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
         init_x <= 6'd0;
         init_y <= 6'd0;
         isReadColor <= 1'b0;
-        requestMovableCheck <= 3'd0;
+        requestMovableCheck <= NONE;
         isMovable <= 1'b1;
         forceReset <= 1'b0;
         STATE <= INIT;
@@ -746,24 +747,20 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
         WAIT: begin
             we <= 1'b1;
 
-            if (sec < 3'd1) begin
+            isMovable <= 1'b1;
+            check_movable_count <= 3'd0;
+            if (sec < 32'd15) begin
                 // Move when there was key input
-                if (move_left_key == 1'b1) begin
+                if (move_left_key == 1'b1 && move_right_key == 1'b0 && spin_left_key == 1'b0) begin
                     requestMovableCheck <= LEFT;
-                    check_movable_count <= 3'd0;
-                    isMovable <= 1'b1;
                     STATE <= CHECK_IF_MOVABLE;
                 end
-                else if (move_right_key == 1'b1) begin
+                else if (move_left_key == 1'b0 && move_right_key == 1'b1 && spin_left_key == 1'b0) begin
                     requestMovableCheck <= RIGHT;
-                    check_movable_count <= 3'd0;
-                    isMovable <= 1'b1;
                     STATE <= CHECK_IF_MOVABLE;
                 end
-                else if (spin_left_key == 1'b1) begin
+                else if (move_left_key == 1'b0 && move_right_key == 1'b0 && spin_left_key == 1'b1) begin
                     requestMovableCheck <= SPIN_L;
-                    check_movable_count <= 3'd0;
-                    isMovable <= 1'b1;
                     STATE <= CHECK_IF_MOVABLE;
                 end
                 else begin
@@ -773,13 +770,11 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
             // When it waited for a certain amount of time
             else begin
                 requestMovableCheck <= DOWN;
-                isMovable <= 1'b1;
                 forceReset <= 1'b1;
                 STATE <= CHECK_IF_MOVABLE;
             end
         end
-        /*  Checks if the Tetromino can really move to the next grid
-            TODO: Add explanation of how this works
+        /*  Checks if the Tetromino can really move to the next grid by reading from the
         */
         CHECK_IF_MOVABLE: begin
             /*  Variables:
@@ -796,8 +791,6 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
             forceReset <= 1'b0;
             we <= 1'b1;
             if (isMovable == 1'b0) begin
-                // Reset isMovable to 1 (movable)
-                isMovable <= 1'b1;
                 // If it couldn't move downward anymore
                 if (requestMovableCheck == DOWN) begin
                     STATE <= CHECK_COMPLETE_ROW;
@@ -1967,8 +1960,8 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
             STATE <= CHECK_IF_MOVABLE;
             // Make isMovable 0 if next grid is NOT white or within the field
             isMovable <= (color_read == WHITE
-                && read_x >= 6'd0 && read_x < 6'd10
-                && read_y >= 6'd0 && read_y < 6'd22) ? 1'b1 : 1'b0;
+                && read_x >= 6'd0 && read_x < 10
+                && read_y >= 6'd0 && read_y < 22) ? 1'b1 : 1'b0;
         end
         // Erase current Tetromino from the field. Used when moving.
         REMOVE_COLOR: begin
@@ -1984,7 +1977,6 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
             end
             else begin
                 request_erase <= 1'b0;
-                erased <= 1'b0;
                 // Go to whatever state the movement was approved
                 case (requestMovableCheck)
                     DOWN:   STATE <= MOVE_ONE_DOWN;
@@ -2144,7 +2136,7 @@ end
 
 // Show content on SRAM
 always @(*) begin
-    LEDR = STATE;
+    LEDR = {draw_tetromino_count, STATE};
     // Paint in black if it's outside the field
     if ((mCoord_X < 220 || (mCoord_X >= 420 && mCoord_X < 640))
         // 60 not 20 because the first 2 "grids" are not shown

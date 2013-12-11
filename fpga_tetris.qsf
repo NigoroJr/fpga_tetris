@@ -465,9 +465,8 @@ set_global_assignment -name VERILOG_FILE vga_sync.v
 set_global_assignment -name PARTITION_FITTER_PRESERVATION_LEVEL PLACEMENT_AND_ROUTING -section_id Top
 set_global_assignment -name VERILOG_FILE MoveKey.v
 
-set_global_assignment -name ENABLE_SIGNALTAP ON
+set_global_assignment -name ENABLE_SIGNALTAP OFF
 set_global_assignment -name USE_SIGNALTAP_FILE stp1.stp
 set_global_assignment -name VERILOG_FILE RandomTetromino.v
-set_global_assignment -name SIGNALTAP_FILE stp1.stp
 set_global_assignment -name SLD_FILE "M:/ECE287/fpga_tetris/stp1_auto_stripped.stp"
 set_instance_assignment -name PARTITION_HIERARCHY root_partition -to | -section_id Top

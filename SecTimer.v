@@ -16,7 +16,7 @@ module SecTimer(clk, rst, sec, forceReset);
                 sec <= 32'd0;
                 count <= 32'b0;
             end
-            else if (count == 32'd10000000) begin
+            else if (count == 32'd1000000) begin
                 sec <= sec + 1;
                 count <= 32'b0;
             end
