@@ -105,15 +105,6 @@ vga_sync u1(
 );
 /*  Notes
     ---------------------------------------------------
-    DO NOT use TABS instead of spaces!!!!!!!!!!!!!!!
-    Use 4 spaces as the tabwidth!!!!!!!!!!!!!!!!
-    If you're using the great, mighty, awesome,
-    one-and-only editor, Vim, execute:
-    :se ts=4
-    :se sw=4
-    :se et
-    :se ts=4
-    ---------------------------------------------------
     Idea:
     Add a variable called PREVIOUS_STATE and check which state "called" the current state.
     This variable can be used to determine whether it's the first iteration in this state or not.
@@ -122,7 +113,8 @@ vga_sync u1(
 */
 wire SEC_CLK;
 reg [31:0] sec;
-SecTimer secondClock(CLOCK_50, RST, sec);
+reg forceReset;
+SecTimer secondClock(CLOCK_50, RST, sec, forceReset);
 
 // draw_? are decided at the very end of this file
 reg [3:0] draw_r, draw_g, draw_b;
@@ -180,10 +172,10 @@ parameter NONE      = 3'd0,
 reg [4:0] STATE;
 // Represents the state of rotation
 reg [1:0] spin_state;
-parameter ORIG = 2'd0,
-			 L_1	= 2'd1,
-			 L_2	= 2'd2,
-			 L_3	= 2'd3;
+parameter   ORIG = 2'd0,
+            L_1	= 2'd1,
+            L_2	= 2'd2,
+            L_3	= 2'd3;
 
 /*---- SRAM stuff ----*/
 // 1 when disabled, 0 when enabled (all the other boolean variables will follow the "common-sense")
@@ -236,7 +228,7 @@ reg erased, request_erase;
 // Type of check that was requested
 reg [2:0] requestMovableCheck;
 // 1 if movable, 0 if not
-reg isMovable, check_done;
+reg isMovable;
 // Something similar to draw_tetromino_count but used for checking
 reg [2:0] check_movable_count;
 // Used to initialize the SRAM
@@ -250,6 +242,7 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
         isReadColor <= 1'b0;
         requestMovableCheck <= 3'd0;
         isMovable <= 1'b1;
+        forceReset <= 1'b0;
         STATE <= INIT;
     end
     else begin
@@ -260,7 +253,7 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
                 init_x <= 6'd0;
                 init_y <= 6'd0;
                 // Prepare for GENERATE state and change state
-                draw_tetromino_count <= 0;
+                draw_tetromino_count <= 3'd0;
                 STATE <= GENERATE;
             end
             else begin
@@ -271,7 +264,7 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
                 y <= init_y;
                 STATE <= INIT;
                 if (init_x == 6'd10) begin
-                    init_x <= 0;
+                    init_x <= 6'd0;
                     init_y <= init_y + 1;
                 end
                 else begin
@@ -295,7 +288,7 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
             erased <= 1'b0;
             STATE <= WRITE_TO_SRAM;
             // Don't forget to initialize (another place is in REMOVE_COLOR)
-            draw_tetromino_count <= 3'd0;
+            //draw_tetromino_count <= 3'd0;
             case (current_tetromino)
                 I: color <= CYAN;
                 O: color <= YELLOW;
@@ -752,34 +745,36 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
         end
         WAIT: begin
             we <= 1'b1;
-            // Move when there was key input
-            if (move_left_key == 1'b1) begin
-                requestMovableCheck <= LEFT;
-                check_movable_count <= 3'd0;
-                isMovable <= 1'b1;
-                STATE <= CHECK_IF_MOVABLE;
-            end
-            else if (move_right_key == 1'b1) begin
-                requestMovableCheck <= RIGHT;
-                check_movable_count <= 3'd0;
-                isMovable <= 1'b1;
-                STATE <= CHECK_IF_MOVABLE;
-            end
-            else if (spin_left_key == 1'b1) begin
-                requestMovableCheck <= SPIN_L;
-                check_movable_count <= 3'd0;
-                isMovable <= 1'b1;
-                STATE <= CHECK_IF_MOVABLE;
-            end
 
-            // TODO
-            else if (sec % 10 < 3'd1) begin
-                STATE <= WAIT;
+            if (sec < 3'd1) begin
+                // Move when there was key input
+                if (move_left_key == 1'b1) begin
+                    requestMovableCheck <= LEFT;
+                    check_movable_count <= 3'd0;
+                    isMovable <= 1'b1;
+                    STATE <= CHECK_IF_MOVABLE;
+                end
+                else if (move_right_key == 1'b1) begin
+                    requestMovableCheck <= RIGHT;
+                    check_movable_count <= 3'd0;
+                    isMovable <= 1'b1;
+                    STATE <= CHECK_IF_MOVABLE;
+                end
+                else if (spin_left_key == 1'b1) begin
+                    requestMovableCheck <= SPIN_L;
+                    check_movable_count <= 3'd0;
+                    isMovable <= 1'b1;
+                    STATE <= CHECK_IF_MOVABLE;
+                end
+                else begin
+                    STATE <= WAIT;
+                end
             end
             // When it waited for a certain amount of time
             else begin
                 requestMovableCheck <= DOWN;
                 isMovable <= 1'b1;
+                forceReset <= 1'b1;
                 STATE <= CHECK_IF_MOVABLE;
             end
         end
@@ -787,7 +782,7 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
             TODO: Add explanation of how this works
         */
         CHECK_IF_MOVABLE: begin
-            /* Variables:
+            /*  Variables:
                     Type of request => requestMovableCheck
                     Result set to   => isMovable
                     Counter         => check_movable_count
@@ -798,6 +793,7 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
                     Make sure to consider the overlap when spinning!
             */
 
+            forceReset <= 1'b0;
             we <= 1'b1;
             if (isMovable == 1'b0) begin
                 // Reset isMovable to 1 (movable)
@@ -808,15 +804,14 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
                     read_x <= 6'd0;
                     read_y <= 6'd22;
                 end
-                // If LEFT or RIGHT was requested and wasn't approved, check for downward movement
+                // If LEFT, RIGHT, or SPIN_L was requested and wasn't approved, go back and wait
                 else begin
-                    requestMovableCheck <= DOWN;
                     STATE <= WAIT;
                 end
             end
             else if (check_movable_count == 3'd4) begin
                 // Reset counter
-                check_movable_count <= 3'd0;
+                //check_movable_count <= 3'd0;
                 isReadColor <= 1'b0;
                 // Request was approved
                 STATE <= REMOVE_COLOR;
@@ -1981,7 +1976,7 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
             // Note: You could also make a variable `BACKGROUND_COLOR` and set color to that.
             color <= WHITE;
             // Don't forget to initialize here, too (another place is in SET_COLOR)
-            draw_tetromino_count <= 3'd0;
+            //draw_tetromino_count <= 3'd0;
             // Erase grids if it hadn't been erased yet
             if (erased == 1'b0) begin
                 request_erase <= 1'b1;
