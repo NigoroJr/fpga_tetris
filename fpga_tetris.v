@@ -749,6 +749,7 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
 
             isMovable <= 1'b1;
             check_movable_count <= 3'd0;
+            forceReset <= 1'b0;
             if (sec < 32'd15) begin
                 // Move when there was key input
                 if (move_left_key == 1'b1 && move_right_key == 1'b0 && spin_left_key == 1'b0) begin
@@ -770,11 +771,11 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
             // When it waited for a certain amount of time
             else begin
                 requestMovableCheck <= DOWN;
-                forceReset <= 1'b1;
                 STATE <= CHECK_IF_MOVABLE;
             end
         end
-        /*  Checks if the Tetromino can really move to the next grid by reading from the
+        /*  Checks if the Tetromino can really move to the next grid by
+            reading the next grid that will be painted.
         */
         CHECK_IF_MOVABLE: begin
             /*  Variables:
@@ -788,8 +789,15 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
                     Make sure to consider the overlap when spinning!
             */
 
-            forceReset <= 1'b0;
             we <= 1'b1;
+            // Reset seconds count here
+            if (requestMovableCheck == DOWN) begin
+                forceReset <= 1'b1;
+            end
+            else begin
+                forceReset <= 1'b0;
+            end
+
             if (isMovable == 1'b0) begin
                 // If it couldn't move downward anymore
                 if (requestMovableCheck == DOWN) begin
