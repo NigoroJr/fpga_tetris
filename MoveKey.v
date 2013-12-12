@@ -11,7 +11,7 @@ module MoveKey(key_push, out, clk, RST);
         else begin
             if (key_push == 1'b1) begin
                 // If it's less than 0.2 seconds from the last key press
-                if (counter < 32'd5000000) begin
+                if (counter < 32'd10000000) begin
                     out <= 1'b0;
                     counter <= counter + 1'b1;
                 end
