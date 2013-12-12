@@ -320,7 +320,7 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
                 end
                 // When it came from the SET_COLOR state
                 else begin
-                    STATE <= WAIT;
+                    STATE <= PRE_WAIT;
                 end
             end
             else begin
