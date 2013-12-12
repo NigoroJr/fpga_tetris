@@ -143,7 +143,8 @@ parameter   INIT = 5'd0,
             INCREMENT_SHIFT_COUNT_X = 5'd18,
             INCREMENT_DRAW_COUNT = 5'd19,
             COLOR_READ_BUFFER = 5'd20,
-            CHECK_BUFFER = 5'd21;
+            CHECK_BUFFER = 5'd21,
+            PRE_WAIT = 5'd22;
 // Each Tetromino has a name
 parameter I = 3'd0,
           O = 3'd1,
@@ -744,12 +745,16 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
             draw_tetromino_count <= draw_tetromino_count + 1;
             STATE <= WRITE_TO_SRAM;
         end
+        PRE_WAIT: begin
+            forceReset <= 1'b0;
+            STATE <= WAIT;
+        end
         WAIT: begin
             we <= 1'b1;
 
             isMovable <= 1'b1;
             check_movable_count <= 3'd0;
-            forceReset <= 1'b0;
+            //forceReset <= 1'b0;
             if (sec < 32'd15) begin
                 // Move when there was key input
                 if (move_left_key == 1'b1 && move_right_key == 1'b0 && spin_left_key == 1'b0) begin
@@ -765,7 +770,7 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
                     STATE <= CHECK_IF_MOVABLE;
                 end
                 else begin
-                    STATE <= WAIT;
+                    STATE <= PRE_WAIT;
                 end
             end
             // When it waited for a certain amount of time
@@ -807,7 +812,8 @@ always @(posedge VGA_CTRL_CLK or negedge RST) begin
                 end
                 // If LEFT, RIGHT, or SPIN_L was requested and wasn't approved, go back and wait
                 else begin
-                    STATE <= WAIT;
+                    //STATE <= WAIT;
+                    STATE <= PRE_WAIT;
                 end
             end
             else if (check_movable_count == 3'd4) begin
